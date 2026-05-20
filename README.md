@@ -19,8 +19,8 @@
    - `ads.txt`
    - `YYYY-MM-DD AZON app-ads.txt`
 6. Проверяет:
-   - `https://www.AZON.games/ads.txt`
-   - `https://www.AZON.games/app-ads.txt`
+   - `https://www.tairgames.top/ads.txt`
+   - `https://www.tairgames.top/app-ads.txt`
 7. Отправляет сообщение в Telegram.
 
 ## Логи

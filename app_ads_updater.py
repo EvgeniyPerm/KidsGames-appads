@@ -23,8 +23,8 @@ DEFAULT_FTP_REMOTE_DIR = "tairgames.top"
 LOG_PATH = Path("logs/app-ads-updater.log")
 
 VERIFY_URLS = (
-    "https://www.AZON.games/ads.txt",
-    "https://www.AZON.games/app-ads.txt",
+    "https://www.tairgames.top/ads.txt",
+    "https://www.tairgames.top/app-ads.txt",
 )
 
 MONTHS = {
