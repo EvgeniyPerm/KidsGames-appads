@@ -306,7 +306,8 @@ def run(settings: Settings, dry_run: bool = False) -> int:
     logging.info("Source first line: %s", first_line)
 
     if not source_is_current(first_line, today):
-        logging.info("%s checked", datetime.now(local_timezone).isoformat(timespec="seconds"))
+        checked_at = datetime.now(local_timezone).strftime("%Y-%m-%d %H:%M")
+        logging.info("%s checked", checked_at)
         return 0
 
     output_text = build_output(source_text, today)
