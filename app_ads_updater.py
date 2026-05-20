@@ -328,7 +328,9 @@ def run(settings: Settings, dry_run: bool = False, today_override: date | None =
 
     upload_to_ftp(settings, files)
     verify_urls(settings.verify_urls, output_text)
-    send_telegram(settings, f"AZON app-ads.txt обновлен: {today.isoformat()}")
+    updated_at = datetime.now(local_timezone).strftime("%Y-%m-%d %H:%M")
+    logging.info("%s updated www.azon.games\\app-ads.txt (wix,tairgames.top)", updated_at)
+    send_telegram(settings, "Updated www.azon.games\\app-ads.txt")
     logging.info("Update completed successfully.")
     return 0
 
