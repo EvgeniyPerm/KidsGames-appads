@@ -63,6 +63,12 @@ TELEGRAM_CHAT_ID=...
 python app_ads_updater.py --dry-run
 ```
 
+Проверить сборку так, будто сегодня конкретная дата:
+
+```powershell
+python app_ads_updater.py --dry-run --today 2026-05-13
+```
+
 Запустить тесты:
 
 ```powershell

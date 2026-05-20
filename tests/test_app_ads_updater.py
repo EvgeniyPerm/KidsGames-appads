@@ -25,6 +25,9 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertIn("OwnerDomain=AZON.games\nnetwork.com, id, DIRECT", output)
         self.assertNotIn("OwnerDomain=Old.example", output)
 
+    def test_month_day_year_has_no_leading_zero(self) -> None:
+        self.assertEqual(updater.month_day_year(date(2026, 5, 13)), "May 13, 2026")
+
 
 if __name__ == "__main__":
     unittest.main()

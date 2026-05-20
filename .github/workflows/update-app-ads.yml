@@ -5,6 +5,19 @@ on:
     # 06:00 Africa/Johannesburg is 04:00 UTC.
     - cron: "0 4 * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and check without FTP upload"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      today:
+        description: "Optional test date, format YYYY-MM-DD"
+        required: false
+        type: string
 
 jobs:
   update:
@@ -33,7 +46,17 @@ jobs:
           FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python app_ads_updater.py
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          TEST_TODAY: ${{ github.event.inputs.today }}
+        run: |
+          args=()
+          if [ "$DRY_RUN" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          if [ -n "$TEST_TODAY" ]; then
+            args+=(--today "$TEST_TODAY")
+          fi
+          python app_ads_updater.py "${args[@]}"
 
       - name: Upload log
         if: always()

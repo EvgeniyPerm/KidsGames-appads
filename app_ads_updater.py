@@ -296,10 +296,12 @@ def url_quote(value: str) -> str:
     return quote_plus(value)
 
 
-def run(settings: Settings, dry_run: bool = False) -> int:
+def run(settings: Settings, dry_run: bool = False, today_override: date | None = None) -> int:
     local_timezone = get_timezone(settings.timezone)
-    today = datetime.now(local_timezone).date()
+    today = today_override or datetime.now(local_timezone).date()
     logging.info("Starting AZON app-ads update check for %s", today.isoformat())
+    if today_override:
+        logging.warning("Test date override is enabled: %s", today.isoformat())
 
     source_text = fetch_text(settings.source_url)
     first_line = source_text.splitlines()[0] if source_text.splitlines() else ""
@@ -334,12 +336,14 @@ def run(settings: Settings, dry_run: bool = False) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update AZON app-ads.txt files.")
     parser.add_argument("--dry-run", action="store_true", help="Build and check source without uploading.")
+    parser.add_argument("--today", help="Override today's date for tests, format YYYY-MM-DD.")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
     args = parser.parse_args()
 
     setup_logging(args.verbose)
     try:
-        return run(env_settings(), dry_run=args.dry_run)
+        today_override = date.fromisoformat(args.today) if args.today else None
+        return run(env_settings(), dry_run=args.dry_run, today_override=today_override)
     except Exception:
         logging.exception("Update failed.")
         return 1
