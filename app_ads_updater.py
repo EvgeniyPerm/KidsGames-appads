@@ -401,7 +401,7 @@ def test_wix_read_write(settings: Settings) -> None:
     before_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     logging.info("Wix ads.txt read successfully (%s bytes).", len(content.encode("utf-8")))
     logging.info("Testing Wix ads.txt write permission by writing current content back.")
-    wix_request(settings, "PUT", {"content": content})
+    wix_request(settings, "PUT", {"adsTxt": {"content": content}})
     actual = get_wix_ads_txt(settings)
     after_hash = hashlib.sha256(actual.encode("utf-8")).hexdigest()
     if after_hash != before_hash:
@@ -417,7 +417,7 @@ def update_wix_ads_txt(settings: Settings, content: str) -> None:
         logging.warning("Wix secrets are missing; Wix update skipped.")
         return
     logging.info("Updating Wix ads.txt via API")
-    wix_request(settings, "PUT", {"content": content})
+    wix_request(settings, "PUT", {"adsTxt": {"content": content}})
     actual = get_wix_ads_txt(settings)
     if hashlib.sha256(actual.encode("utf-8")).hexdigest() != hashlib.sha256(content.encode("utf-8")).hexdigest():
         raise RuntimeError("Wix verification failed: content hash does not match")
