@@ -2,8 +2,8 @@ name: Update app-ads.txt
 
 on:
   schedule:
-    # 06:00 Africa/Johannesburg is 04:00 UTC.
-    - cron: "0 4 * * *"
+    # 18:00 Africa/Johannesburg is 16:00 UTC.
+    - cron: "0 16 * * *"
   workflow_dispatch:
     inputs:
       dry_run:

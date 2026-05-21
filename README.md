@@ -4,7 +4,7 @@
 
 ## Как работает
 
-Сервис запускается каждый день в 06:00 по `Africa/Johannesburg` через GitHub Actions.
+Сервис запускается каждый день в 18:00 по `Africa/Johannesburg` через GitHub Actions.
 
 1. Скачивает исходный файл:
    `https://raw.githubusercontent.com/cleveradssolutions/App-ads.txt/master/app-ads.txt`
@@ -19,6 +19,8 @@
    - `ads.txt`
    - `YYYY-MM-DD AZON app-ads.txt`
 6. Проверяет:
+   - `https://www.AZON.games/ads.txt`
+   - `https://www.AZON.games/app-ads.txt`
    - `https://www.tairgames.top/ads.txt`
    - `https://www.tairgames.top/app-ads.txt`
 7. Отправляет сообщение в Telegram.

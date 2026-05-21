@@ -26,6 +26,8 @@ WIX_ADS_TXT_URL = "https://www.wixapis.com/promote-seo-robots-server/v2/ads"
 WIX_QUERY_SITES_URL = "https://www.wixapis.com/site-list/v2/sites/query"
 
 VERIFY_URLS = (
+    "https://www.AZON.games/ads.txt",
+    "https://www.AZON.games/app-ads.txt",
     "https://www.tairgames.top/ads.txt",
     "https://www.tairgames.top/app-ads.txt",
 )
