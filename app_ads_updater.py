@@ -75,6 +75,7 @@ class Settings:
     wix_api_key: str | None
     wix_site_id: str | None
     wix_account_id: str | None
+    wix_enabled: bool
     verify_urls: tuple[str, ...]
 
 
@@ -135,6 +136,7 @@ def env_settings() -> Settings:
         wix_api_key=env("WIX_API_KEY"),
         wix_site_id=env("WIX_SITE_ID"),
         wix_account_id=env("WIX_ACCOUNT_ID"),
+        wix_enabled=(env("WIX_ENABLED", "false") or "").lower() == "true",
         verify_urls=verify_urls,
     )
 
@@ -343,6 +345,9 @@ def get_wix_ads_txt(settings: Settings) -> str:
 
 
 def update_wix_ads_txt(settings: Settings, content: str) -> None:
+    if not settings.wix_enabled:
+        logging.warning("Wix update is disabled; set WIX_ENABLED=true after Wix API check passes.")
+        return
     if not settings.wix_api_key and not settings.wix_site_id:
         logging.warning("Wix secrets are missing; Wix update skipped.")
         return

@@ -65,6 +65,7 @@ jobs:
           WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
           WIX_SITE_ID: ${{ secrets.WIX_SITE_ID }}
           WIX_ACCOUNT_ID: ${{ secrets.WIX_ACCOUNT_ID }}
+          WIX_ENABLED: ${{ secrets.WIX_ENABLED }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}
