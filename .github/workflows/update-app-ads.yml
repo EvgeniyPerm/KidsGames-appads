@@ -18,6 +18,14 @@ on:
         description: "Optional test date, format YYYY-MM-DD"
         required: false
         type: string
+      test_telegram:
+        description: "Send only the Telegram test message"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   update:
@@ -48,7 +56,12 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
+          TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}
         run: |
+          if [ "$TEST_TELEGRAM" = "true" ]; then
+            python app_ads_updater.py --test-telegram
+            exit 0
+          fi
           args=()
           if [ "$DRY_RUN" = "true" ]; then
             args+=(--dry-run)

@@ -285,8 +285,12 @@ def send_telegram(settings: Settings, message: str) -> None:
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         method="POST",
     )
-    with urlopen(request, timeout=30) as response:
-        response.read()
+    try:
+        with urlopen(request, timeout=30) as response:
+            response.read()
+    except HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Telegram error {exc.code}: {error_body}") from exc
     logging.info("Telegram notification sent.")
 
 
@@ -339,11 +343,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Update AZON app-ads.txt files.")
     parser.add_argument("--dry-run", action="store_true", help="Build and check source without uploading.")
     parser.add_argument("--today", help="Override today's date for tests, format YYYY-MM-DD.")
+    parser.add_argument("--test-telegram", action="store_true", help="Send only the Telegram test message.")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
     args = parser.parse_args()
 
     setup_logging(args.verbose)
     try:
+        if args.test_telegram:
+            send_telegram(env_settings(), "Updated www.azon.games\\app-ads.txt")
+            return 0
         today_override = date.fromisoformat(args.today) if args.today else None
         return run(env_settings(), dry_run=args.dry_run, today_override=today_override)
     except Exception:

@@ -69,6 +69,12 @@ python app_ads_updater.py --dry-run
 python app_ads_updater.py --dry-run --today 2026-05-13
 ```
 
+Проверить только Telegram:
+
+```powershell
+python app_ads_updater.py --test-telegram
+```
+
 Запустить тесты:
 
 ```powershell
