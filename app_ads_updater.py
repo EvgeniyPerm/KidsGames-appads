@@ -291,22 +291,14 @@ def wix_identity_attempts(settings: Settings) -> list[tuple[str, str]]:
         name
         for name, value in (
             ("WIX_API_KEY", settings.wix_api_key),
+            ("WIX_SITE_ID", settings.wix_site_id),
         )
         if not value
     ]
     if missing:
         raise RuntimeError(f"Missing Wix secrets: {', '.join(missing)}")
 
-    attempts: list[tuple[str, str]] = []
-    if settings.wix_site_id:
-        attempts.append(("wix-site-id", settings.wix_site_id))
-    if settings.wix_account_id:
-        attempts.append(("wix-account-id", settings.wix_account_id))
-    elif settings.wix_site_id:
-        attempts.append(("wix-account-id", settings.wix_site_id))
-    if not attempts:
-        raise RuntimeError("Missing Wix secrets: WIX_SITE_ID or WIX_ACCOUNT_ID")
-    return attempts
+    return [("wix-site-id", settings.wix_site_id or "")]
 
 
 def wix_request(settings: Settings, method: str, payload: dict[str, object] | None = None) -> dict[str, object]:
