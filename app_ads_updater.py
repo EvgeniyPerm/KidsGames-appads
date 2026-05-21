@@ -134,7 +134,7 @@ def env_settings() -> Settings:
         ftp_remote_dir=env("FTP_REMOTE_DIR", DEFAULT_FTP_REMOTE_DIR),
         telegram_bot_token=env("TELEGRAM_BOT_TOKEN"),
         telegram_chat_id=env("TELEGRAM_CHAT_ID"),
-        wix_api_key=env("WIX_API_KEY2") or env("WIX_API_KEY"),
+        wix_api_key=env("WIX_API_KEY") or env("WIX_API_KEY2"),
         wix_site_id=env("WIX_SITE_ID"),
         wix_account_id=env("WIX_ACCOUNT_ID"),
         wix_enabled=(env("WIX_ENABLED", "false") or "").lower() == "true",
