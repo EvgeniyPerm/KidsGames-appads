@@ -21,9 +21,12 @@ class AppAdsUpdaterTest(unittest.TestCase):
         source = "# Updated May 13, 2026\nOwnerDomain=Old.example\nnetwork.com, id, DIRECT\n"
         output = updater.build_output(source, date(2026, 5, 13))
 
-        self.assertTrue(output.startswith("# AZON Updated May 13, 2026 \n"))
+        self.assertTrue(output.startswith("# AZON Last updated May 13, 2026\n"))
         self.assertIn("OwnerDomain=AZON.games\nnetwork.com, id, DIRECT", output)
         self.assertNotIn("OwnerDomain=Old.example", output)
+        self.assertNotIn("adcolony.com", output)
+        self.assertNotIn("Verve.com", output)
+        self.assertIn("verve.com, 15290, RESELLER, 0c8f5958fc2d6270", output)
 
     def test_month_day_year_has_no_leading_zero(self) -> None:
         self.assertEqual(updater.month_day_year(date(2026, 5, 13)), "May 13, 2026")

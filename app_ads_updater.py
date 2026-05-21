@@ -44,20 +44,17 @@ MONTHS = {
 
 
 AZON_LINES = (
-    "# AZON Updated {date_text} ",
+    "# AZON Last updated {date_text}",
     "google.com, pub-2206193735487862, DIRECT, f08c47fec0942fa0",
     "facebook.com, 982473989127847, DIRECT, c3e20eee3f780d68",
     "applovin.com, 3924b154e4c887949b692faf5649901d, DIRECT",
-    "adcolony.com, 5d8cbf6671c93a42, RESELLER, 1ad675c9de6b5176",
     "rubiconproject.com, 16356, RESELLER, 0bfd66d529a55807",
     "openx.com, 540785403, RESELLER, 6a698e2ec38604c6",
     "indexexchange.com, 191086, RESELLER",
     "pubmatic.com, 158862, RESELLER, 5d62403b186f2ace",
     "pubnative.net, 1007170, RESELLER, d641df8625486a7b",
-    "Verve.com, 15290, RESELLER, 0c8f5958fc2d6270",
-    "indexexchange.com, 191086, RESELLER",
+    "verve.com, 15290, RESELLER, 0c8f5958fc2d6270",
     "mangomob.net, 5000671859, DIRECT",
-    "",
     "",
 )
 
