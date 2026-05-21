@@ -42,6 +42,14 @@ on:
         options:
           - "false"
           - "true"
+      test_wix_sites:
+        description: "Check whether WIX_SITE_ID is visible to Wix API key/account"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   update:
@@ -80,6 +88,7 @@ jobs:
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}
           TEST_WIX: ${{ github.event.inputs.test_wix }}
           TEST_WIX_WRITE: ${{ github.event.inputs.test_wix_write }}
+          TEST_WIX_SITES: ${{ github.event.inputs.test_wix_sites }}
         run: |
           if [ "$TEST_TELEGRAM" = "true" ]; then
             python app_ads_updater.py --test-telegram
@@ -91,6 +100,10 @@ jobs:
           fi
           if [ "$TEST_WIX_WRITE" = "true" ]; then
             python app_ads_updater.py --test-wix-write
+            exit 0
+          fi
+          if [ "$TEST_WIX_SITES" = "true" ]; then
+            python app_ads_updater.py --test-wix-sites
             exit 0
           fi
           args=()

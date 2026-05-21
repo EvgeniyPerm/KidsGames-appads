@@ -23,6 +23,7 @@ DEFAULT_TIMEZONE = "Africa/Johannesburg"
 DEFAULT_FTP_REMOTE_DIR = "tairgames.top"
 LOG_PATH = Path("logs/app-ads-updater.log")
 WIX_ADS_TXT_URL = "https://www.wixapis.com/promote-seo-robots-server/v2/ads"
+WIX_QUERY_SITES_URL = "https://www.wixapis.com/site-list/v2/sites/query"
 
 VERIFY_URLS = (
     "https://www.tairgames.top/ads.txt",
@@ -286,6 +287,27 @@ def wix_headers(settings: Settings, id_header: str, id_value: str) -> dict[str, 
     }
 
 
+def wix_account_headers(settings: Settings) -> dict[str, str]:
+    missing = [
+        name
+        for name, value in (
+            ("WIX_API_KEY", settings.wix_api_key),
+            ("WIX_ACCOUNT_ID", settings.wix_account_id),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(f"Missing Wix secrets: {', '.join(missing)}")
+
+    return {
+        "Authorization": settings.wix_api_key or "",
+        "wix-account-id": settings.wix_account_id or "",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "AZON-app-ads-updater/1.0",
+    }
+
+
 def wix_identity_attempts(settings: Settings) -> list[tuple[str, str]]:
     missing = [
         name
@@ -315,6 +337,44 @@ def wix_request(settings: Settings, method: str, payload: dict[str, object] | No
             error_body = exc.read().decode("utf-8", errors="replace")
             errors.append(f"{id_header}: Wix error {exc.code}: {error_body[:500]}")
     raise RuntimeError("Wix API failed. " + " | ".join(errors))
+
+
+def query_wix_sites(settings: Settings) -> dict[str, object]:
+    payload = {"query": {"paging": {"limit": 100}}}
+    data = json.dumps(payload).encode("utf-8")
+    logging.info("Calling Wix Query Sites API with wix-account-id")
+    request = Request(WIX_QUERY_SITES_URL, data=data, headers=wix_account_headers(settings), method="POST")
+    try:
+        with urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8", errors="replace")
+        return json.loads(body) if body else {}
+    except HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Wix Query Sites error {exc.code}: {error_body[:500]}") from exc
+
+
+def site_id_from_wix_site(site: object) -> str | None:
+    if not isinstance(site, dict):
+        return None
+    value = site.get("id") or site.get("siteId")
+    return value if isinstance(value, str) else None
+
+
+def test_wix_site_access(settings: Settings) -> None:
+    if not settings.wix_site_id:
+        raise RuntimeError("Missing Wix secrets: WIX_SITE_ID")
+
+    response = query_wix_sites(settings)
+    sites = response.get("sites")
+    if not isinstance(sites, list):
+        raise RuntimeError(f"Wix Query Sites response does not contain sites list: {response}")
+
+    site_ids = sorted(site_id for site_id in (site_id_from_wix_site(site) for site in sites) if site_id)
+    logging.info("Wix Query Sites returned %s site(s).", len(site_ids))
+    if settings.wix_site_id not in site_ids:
+        visible = ", ".join(site_ids[:10]) if site_ids else "none"
+        raise RuntimeError(f"WIX_SITE_ID is not visible to this API key/account. Visible site IDs: {visible}")
+    logging.info("WIX_SITE_ID is visible to this API key/account.")
 
 
 def extract_wix_content(response: dict[str, object]) -> str:
@@ -442,6 +502,7 @@ def main() -> int:
     parser.add_argument("--test-telegram", action="store_true", help="Send only the Telegram test message.")
     parser.add_argument("--test-wix", action="store_true", help="Read Wix ads.txt through the API without updating.")
     parser.add_argument("--test-wix-write", action="store_true", help="Read Wix ads.txt, write the same content back, and verify.")
+    parser.add_argument("--test-wix-sites", action="store_true", help="Check whether WIX_SITE_ID is visible to the Wix API key/account.")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
     args = parser.parse_args()
 
@@ -456,6 +517,9 @@ def main() -> int:
             return 0
         if args.test_wix_write:
             test_wix_read_write(env_settings())
+            return 0
+        if args.test_wix_sites:
+            test_wix_site_access(env_settings())
             return 0
         today_override = date.fromisoformat(args.today) if args.today else None
         return run(env_settings(), dry_run=args.dry_run, today_override=today_override)
