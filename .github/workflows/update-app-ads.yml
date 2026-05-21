@@ -26,6 +26,14 @@ on:
         options:
           - "false"
           - "true"
+      test_wix:
+        description: "Read Wix ads.txt via API without updating"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   update:
@@ -54,12 +62,19 @@ jobs:
           FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_SITE_ID: ${{ secrets.WIX_SITE_ID }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}
+          TEST_WIX: ${{ github.event.inputs.test_wix }}
         run: |
           if [ "$TEST_TELEGRAM" = "true" ]; then
             python app_ads_updater.py --test-telegram
+            exit 0
+          fi
+          if [ "$TEST_WIX" = "true" ]; then
+            python app_ads_updater.py --test-wix
             exit 0
           fi
           args=()

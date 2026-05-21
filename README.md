@@ -75,6 +75,12 @@ python app_ads_updater.py --dry-run --today 2026-05-13
 python app_ads_updater.py --test-telegram
 ```
 
+Проверить только Wix API без обновления сайта:
+
+```powershell
+python app_ads_updater.py --test-wix
+```
+
 Запустить тесты:
 
 ```powershell

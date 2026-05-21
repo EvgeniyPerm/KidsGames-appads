@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ftplib
 import hashlib
+import json
 import logging
 import os
 import re
@@ -21,6 +22,7 @@ SOURCE_URL = "https://raw.githubusercontent.com/cleveradssolutions/App-ads.txt/m
 DEFAULT_TIMEZONE = "Africa/Johannesburg"
 DEFAULT_FTP_REMOTE_DIR = "tairgames.top"
 LOG_PATH = Path("logs/app-ads-updater.log")
+WIX_ADS_TXT_URL = "https://www.wixapis.com/promote-seo-robots-server/v2/ads"
 
 VERIFY_URLS = (
     "https://www.tairgames.top/ads.txt",
@@ -70,6 +72,8 @@ class Settings:
     ftp_remote_dir: str
     telegram_bot_token: str | None
     telegram_chat_id: str | None
+    wix_api_key: str | None
+    wix_site_id: str | None
     verify_urls: tuple[str, ...]
 
 
@@ -127,6 +131,8 @@ def env_settings() -> Settings:
         ftp_remote_dir=env("FTP_REMOTE_DIR", DEFAULT_FTP_REMOTE_DIR),
         telegram_bot_token=env("TELEGRAM_BOT_TOKEN"),
         telegram_chat_id=env("TELEGRAM_CHAT_ID"),
+        wix_api_key=env("WIX_API_KEY"),
+        wix_site_id=env("WIX_SITE_ID"),
         verify_urls=verify_urls,
     )
 
@@ -266,6 +272,67 @@ def verify_urls(urls: Iterable[str], expected_text: str) -> None:
         raise RuntimeError("Verification failed: " + "; ".join(failures))
 
 
+def wix_headers(settings: Settings) -> dict[str, str]:
+    missing = [
+        name
+        for name, value in (
+            ("WIX_API_KEY", settings.wix_api_key),
+            ("WIX_SITE_ID", settings.wix_site_id),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(f"Missing Wix secrets: {', '.join(missing)}")
+    return {
+        "Authorization": settings.wix_api_key or "",
+        "wix-site-id": settings.wix_site_id or "",
+        "Content-Type": "application/json",
+    }
+
+
+def wix_request(settings: Settings, method: str, payload: dict[str, object] | None = None) -> dict[str, object]:
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = Request(WIX_ADS_TXT_URL, data=data, headers=wix_headers(settings), method=method)
+    try:
+        with urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Wix error {exc.code}: {error_body}") from exc
+    return json.loads(body) if body else {}
+
+
+def extract_wix_content(response: dict[str, object]) -> str:
+    content = response.get("content")
+    if isinstance(content, str):
+        return content
+
+    ads_txt = response.get("adsTxt")
+    if isinstance(ads_txt, dict):
+        nested_content = ads_txt.get("content")
+        if isinstance(nested_content, str):
+            return nested_content
+
+    raise RuntimeError(f"Wix response does not contain ads.txt content: {response}")
+
+
+def get_wix_ads_txt(settings: Settings) -> str:
+    logging.info("Reading Wix ads.txt via API")
+    return extract_wix_content(wix_request(settings, "GET"))
+
+
+def update_wix_ads_txt(settings: Settings, content: str) -> None:
+    if not settings.wix_api_key and not settings.wix_site_id:
+        logging.warning("Wix secrets are missing; Wix update skipped.")
+        return
+    logging.info("Updating Wix ads.txt via API")
+    wix_request(settings, "PUT", {"content": content})
+    actual = get_wix_ads_txt(settings)
+    if hashlib.sha256(actual.encode("utf-8")).hexdigest() != hashlib.sha256(content.encode("utf-8")).hexdigest():
+        raise RuntimeError("Wix verification failed: content hash does not match")
+    logging.info("Wix ads.txt verified via API.")
+
+
 def send_telegram(settings: Settings, message: str) -> None:
     if not settings.telegram_bot_token or not settings.telegram_chat_id:
         logging.warning("Telegram secrets are missing; notification skipped.")
@@ -328,6 +395,7 @@ def run(settings: Settings, dry_run: bool = False, today_override: date | None =
         return 0
 
     upload_to_ftp(settings, files)
+    update_wix_ads_txt(settings, output_text)
     verify_urls(settings.verify_urls, output_text)
     updated_at = datetime.now(local_timezone).strftime("%Y-%m-%d %H:%M")
     logging.info("%s updated www.azon.games\\app-ads.txt (wix,tairgames.top)", updated_at)
@@ -341,6 +409,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Build and check source without uploading.")
     parser.add_argument("--today", help="Override today's date for tests, format YYYY-MM-DD.")
     parser.add_argument("--test-telegram", action="store_true", help="Send only the Telegram test message.")
+    parser.add_argument("--test-wix", action="store_true", help="Read Wix ads.txt through the API without updating.")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
     args = parser.parse_args()
 
@@ -348,6 +417,10 @@ def main() -> int:
     try:
         if args.test_telegram:
             send_telegram(env_settings(), "Updated www.azon.games\\app-ads.txt")
+            return 0
+        if args.test_wix:
+            content = get_wix_ads_txt(env_settings())
+            logging.info("Wix ads.txt read successfully (%s bytes).", len(content.encode("utf-8")))
             return 0
         today_override = date.fromisoformat(args.today) if args.today else None
         return run(env_settings(), dry_run=args.dry_run, today_override=today_override)
