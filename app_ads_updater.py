@@ -74,6 +74,7 @@ class Settings:
     telegram_chat_id: str | None
     wix_api_key: str | None
     wix_site_id: str | None
+    wix_account_id: str | None
     verify_urls: tuple[str, ...]
 
 
@@ -133,6 +134,7 @@ def env_settings() -> Settings:
         telegram_chat_id=env("TELEGRAM_CHAT_ID"),
         wix_api_key=env("WIX_API_KEY"),
         wix_site_id=env("WIX_SITE_ID"),
+        wix_account_id=env("WIX_ACCOUNT_ID"),
         verify_urls=verify_urls,
     )
 
@@ -272,34 +274,53 @@ def verify_urls(urls: Iterable[str], expected_text: str) -> None:
         raise RuntimeError("Verification failed: " + "; ".join(failures))
 
 
-def wix_headers(settings: Settings) -> dict[str, str]:
+def wix_headers(settings: Settings, id_header: str, id_value: str) -> dict[str, str]:
+    return {
+        "Authorization": settings.wix_api_key or "",
+        id_header: id_value,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "AZON-app-ads-updater/1.0",
+    }
+
+
+def wix_identity_attempts(settings: Settings) -> list[tuple[str, str]]:
     missing = [
         name
         for name, value in (
             ("WIX_API_KEY", settings.wix_api_key),
-            ("WIX_SITE_ID", settings.wix_site_id),
         )
         if not value
     ]
     if missing:
         raise RuntimeError(f"Missing Wix secrets: {', '.join(missing)}")
-    return {
-        "Authorization": settings.wix_api_key or "",
-        "wix-site-id": settings.wix_site_id or "",
-        "Content-Type": "application/json",
-    }
+
+    attempts: list[tuple[str, str]] = []
+    if settings.wix_site_id:
+        attempts.append(("wix-site-id", settings.wix_site_id))
+    if settings.wix_account_id:
+        attempts.append(("wix-account-id", settings.wix_account_id))
+    elif settings.wix_site_id:
+        attempts.append(("wix-account-id", settings.wix_site_id))
+    if not attempts:
+        raise RuntimeError("Missing Wix secrets: WIX_SITE_ID or WIX_ACCOUNT_ID")
+    return attempts
 
 
 def wix_request(settings: Settings, method: str, payload: dict[str, object] | None = None) -> dict[str, object]:
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    request = Request(WIX_ADS_TXT_URL, data=data, headers=wix_headers(settings), method=method)
-    try:
-        with urlopen(request, timeout=30) as response:
-            body = response.read().decode("utf-8", errors="replace")
-    except HTTPError as exc:
-        error_body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Wix error {exc.code}: {error_body}") from exc
-    return json.loads(body) if body else {}
+    errors: list[str] = []
+    for id_header, id_value in wix_identity_attempts(settings):
+        logging.info("Calling Wix API with %s", id_header)
+        request = Request(WIX_ADS_TXT_URL, data=data, headers=wix_headers(settings, id_header, id_value), method=method)
+        try:
+            with urlopen(request, timeout=30) as response:
+                body = response.read().decode("utf-8", errors="replace")
+            return json.loads(body) if body else {}
+        except HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            errors.append(f"{id_header}: Wix error {exc.code}: {error_body[:500]}")
+    raise RuntimeError("Wix API failed. " + " | ".join(errors))
 
 
 def extract_wix_content(response: dict[str, object]) -> str:
