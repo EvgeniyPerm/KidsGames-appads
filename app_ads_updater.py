@@ -133,7 +133,7 @@ def env_settings() -> Settings:
         ftp_remote_dir=env("FTP_REMOTE_DIR", DEFAULT_FTP_REMOTE_DIR),
         telegram_bot_token=env("TELEGRAM_BOT_TOKEN"),
         telegram_chat_id=env("TELEGRAM_CHAT_ID"),
-        wix_api_key=env("WIX_API_KEY"),
+        wix_api_key=env("WIX_API_KEY2") or env("WIX_API_KEY"),
         wix_site_id=env("WIX_SITE_ID"),
         wix_account_id=env("WIX_ACCOUNT_ID"),
         wix_enabled=(env("WIX_ENABLED", "false") or "").lower() == "true",
@@ -336,6 +336,19 @@ def get_wix_ads_txt(settings: Settings) -> str:
     return extract_wix_content(wix_request(settings, "GET"))
 
 
+def test_wix_read_write(settings: Settings) -> None:
+    content = get_wix_ads_txt(settings)
+    before_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    logging.info("Wix ads.txt read successfully (%s bytes).", len(content.encode("utf-8")))
+    logging.info("Testing Wix ads.txt write permission by writing current content back.")
+    wix_request(settings, "PUT", {"content": content})
+    actual = get_wix_ads_txt(settings)
+    after_hash = hashlib.sha256(actual.encode("utf-8")).hexdigest()
+    if after_hash != before_hash:
+        raise RuntimeError("Wix write test failed: content changed after writing it back")
+    logging.info("Wix ads.txt read/write test passed.")
+
+
 def update_wix_ads_txt(settings: Settings, content: str) -> None:
     if not settings.wix_enabled:
         logging.warning("Wix update is disabled; set WIX_ENABLED=true after Wix API check passes.")
@@ -428,6 +441,7 @@ def main() -> int:
     parser.add_argument("--today", help="Override today's date for tests, format YYYY-MM-DD.")
     parser.add_argument("--test-telegram", action="store_true", help="Send only the Telegram test message.")
     parser.add_argument("--test-wix", action="store_true", help="Read Wix ads.txt through the API without updating.")
+    parser.add_argument("--test-wix-write", action="store_true", help="Read Wix ads.txt, write the same content back, and verify.")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
     args = parser.parse_args()
 
@@ -439,6 +453,9 @@ def main() -> int:
         if args.test_wix:
             content = get_wix_ads_txt(env_settings())
             logging.info("Wix ads.txt read successfully (%s bytes).", len(content.encode("utf-8")))
+            return 0
+        if args.test_wix_write:
+            test_wix_read_write(env_settings())
             return 0
         today_override = date.fromisoformat(args.today) if args.today else None
         return run(env_settings(), dry_run=args.dry_run, today_override=today_override)

@@ -34,6 +34,14 @@ on:
         options:
           - "false"
           - "true"
+      test_wix_write:
+        description: "Read Wix ads.txt, write same content back, and verify"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   update:
@@ -63,6 +71,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
+          WIX_API_KEY2: ${{ secrets.WIX_API_KEY2 }}
           WIX_SITE_ID: ${{ secrets.WIX_SITE_ID }}
           WIX_ACCOUNT_ID: ${{ secrets.WIX_ACCOUNT_ID }}
           WIX_ENABLED: ${{ secrets.WIX_ENABLED }}
@@ -70,6 +79,7 @@ jobs:
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}
           TEST_WIX: ${{ github.event.inputs.test_wix }}
+          TEST_WIX_WRITE: ${{ github.event.inputs.test_wix_write }}
         run: |
           if [ "$TEST_TELEGRAM" = "true" ]; then
             python app_ads_updater.py --test-telegram
@@ -77,6 +87,10 @@ jobs:
           fi
           if [ "$TEST_WIX" = "true" ]; then
             python app_ads_updater.py --test-wix
+            exit 0
+          fi
+          if [ "$TEST_WIX_WRITE" = "true" ]; then
+            python app_ads_updater.py --test-wix-write
             exit 0
           fi
           args=()
