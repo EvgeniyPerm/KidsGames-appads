@@ -24,6 +24,13 @@ DEFAULT_FTP_REMOTE_DIR = "tairgames.top"
 LOG_PATH = Path("logs/app-ads-updater.log")
 WIX_ADS_TXT_URL = "https://www.wixapis.com/promote-seo-robots-server/v2/ads"
 WIX_QUERY_SITES_URL = "https://www.wixapis.com/site-list/v2/sites/query"
+TELEGRAM_SUCCESS_MESSAGE = (
+    "✅ Обновил ads файлы (с частью AZON)\n"
+    "azon.games/app-ads.txt\n"
+    "azon.games/ads.txt\n"
+    "tairgames.top/app-ads.txt\n"
+    "tairgames.top/ads.txt"
+)
 
 VERIFY_URLS = (
     "https://www.AZON.games/ads.txt",
@@ -492,7 +499,7 @@ def run(settings: Settings, dry_run: bool = False, today_override: date | None =
     verify_urls(settings.verify_urls, output_text)
     updated_at = datetime.now(local_timezone).strftime("%Y-%m-%d %H:%M")
     logging.info("%s updated www.azon.games\\app-ads.txt (wix,tairgames.top)", updated_at)
-    send_telegram(settings, "Updated www.azon.games\\app-ads.txt")
+    send_telegram(settings, TELEGRAM_SUCCESS_MESSAGE)
     logging.info("Update completed successfully.")
     return 0
 
@@ -511,7 +518,7 @@ def main() -> int:
     setup_logging(args.verbose)
     try:
         if args.test_telegram:
-            send_telegram(env_settings(), "Updated www.azon.games\\app-ads.txt")
+            send_telegram(env_settings(), TELEGRAM_SUCCESS_MESSAGE)
             return 0
         if args.test_wix:
             content = get_wix_ads_txt(env_settings())
