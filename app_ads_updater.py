@@ -198,12 +198,30 @@ def source_access_from_env(source_name: str) -> SourceAccess:
     )
 
 
+def looks_like_ads_txt(text: str) -> bool:
+    stripped = text.lstrip()
+    if stripped.lower().startswith(("<!doctype html", "<html")):
+        return False
+
+    for line in text.splitlines():
+        candidate = line.strip()
+        if not candidate or candidate.startswith("#"):
+            continue
+        parts = [part.strip() for part in candidate.split(",")]
+        if len(parts) >= 3 and parts[2].upper() in {"DIRECT", "RESELLER"}:
+            return True
+    return False
+
+
 def test_source_access(source_name: str) -> None:
     source = source_access_from_env(source_name)
     auth_state = "with login/password" if source.login and source.password else "without auth"
     logging.info("Testing %s source access %s.", source.name, auth_state)
     text = fetch_text(source.url, login=source.login, password=source.password)
     lines = text.splitlines()
+    if not looks_like_ads_txt(text):
+        preview = " | ".join(line[:120] for line in lines[:3])
+        raise RuntimeError(f"{source.name} source does not look like app-ads.txt. First lines: {preview}")
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     logging.info(
         "%s source fetched successfully: %s bytes, %s lines, sha256=%s",

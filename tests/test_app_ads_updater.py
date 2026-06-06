@@ -51,6 +51,14 @@ class AppAdsUpdaterTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Unknown source"):
             updater.source_access_from_env("unknown")
 
+    def test_looks_like_ads_txt_accepts_ads_line(self) -> None:
+        text = "# Network\nexample.com, pub-123, DIRECT, abcdef\n"
+        self.assertTrue(updater.looks_like_ads_txt(text))
+
+    def test_looks_like_ads_txt_rejects_html(self) -> None:
+        text = "<!DOCTYPE html>\n<html lang=\"en\">\n"
+        self.assertFalse(updater.looks_like_ads_txt(text))
+
 
 if __name__ == "__main__":
     unittest.main()
