@@ -1,5 +1,7 @@
 from datetime import date
+import os
 import unittest
+from unittest.mock import patch
 
 import app_ads_updater as updater
 
@@ -30,6 +32,24 @@ class AppAdsUpdaterTest(unittest.TestCase):
 
     def test_month_day_year_has_no_leading_zero(self) -> None:
         self.assertEqual(updater.month_day_year(date(2026, 5, 13)), "May 13, 2026")
+
+    def test_source_access_from_env_reads_mintegral_settings(self) -> None:
+        env = {
+            "MINTEGRAL_SOURCE_URL": "https://example.com/app-ads.txt",
+            "MINTEGRAL_LOGIN": "user",
+            "MINTEGRAL_PASSWORD": "password",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("mintegral")
+
+        self.assertEqual(source.name, "mintegral")
+        self.assertEqual(source.url, "https://example.com/app-ads.txt")
+        self.assertEqual(source.login, "user")
+        self.assertEqual(source.password, "password")
+
+    def test_source_access_from_env_rejects_unknown_source(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "Unknown source"):
+            updater.source_access_from_env("unknown")
 
 
 if __name__ == "__main__":

@@ -2,8 +2,8 @@ name: Update app-ads.txt
 
 on:
   schedule:
-    # 18:00 Africa/Johannesburg is 16:00 UTC.
-    - cron: "0 16 * * *"
+    # 19:00 Africa/Johannesburg is 17:00 UTC.
+    - cron: "0 17 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -50,6 +50,10 @@ on:
         options:
           - "false"
           - "true"
+      test_source:
+        description: "Fetch one configured source without updating, for example: mintegral"
+        required: false
+        type: string
 
 jobs:
   update:
@@ -83,12 +87,16 @@ jobs:
           WIX_SITE_ID: ${{ secrets.WIX_SITE_ID }}
           WIX_ACCOUNT_ID: ${{ secrets.WIX_ACCOUNT_ID }}
           WIX_ENABLED: ${{ secrets.WIX_ENABLED }}
+          MINTEGRAL_SOURCE_URL: ${{ secrets.MINTEGRAL_SOURCE_URL }}
+          MINTEGRAL_LOGIN: ${{ secrets.MINTEGRAL_LOGIN }}
+          MINTEGRAL_PASSWORD: ${{ secrets.MINTEGRAL_PASSWORD }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}
           TEST_WIX: ${{ github.event.inputs.test_wix }}
           TEST_WIX_WRITE: ${{ github.event.inputs.test_wix_write }}
           TEST_WIX_SITES: ${{ github.event.inputs.test_wix_sites }}
+          TEST_SOURCE: ${{ github.event.inputs.test_source }}
         run: |
           if [ "$TEST_TELEGRAM" = "true" ]; then
             python app_ads_updater.py --test-telegram
@@ -104,6 +112,10 @@ jobs:
           fi
           if [ "$TEST_WIX_SITES" = "true" ]; then
             python app_ads_updater.py --test-wix-sites
+            exit 0
+          fi
+          if [ -n "$TEST_SOURCE" ]; then
+            python app_ads_updater.py --test-source "$TEST_SOURCE"
             exit 0
           fi
           args=()

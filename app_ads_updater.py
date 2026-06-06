@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import ftplib
 import hashlib
 import json
@@ -54,6 +55,10 @@ MONTHS = {
     "december": 12,
 }
 
+SOURCE_ENV_PREFIXES = {
+    "mintegral": "MINTEGRAL",
+}
+
 
 AZON_LINES = (
     "# AZON Last updated {date_text}",
@@ -87,6 +92,14 @@ class Settings:
     wix_account_id: str | None
     wix_enabled: bool
     verify_urls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SourceAccess:
+    name: str
+    url: str
+    login: str | None
+    password: str | None
 
 
 def month_day_year(value: date) -> str:
@@ -151,10 +164,56 @@ def env_settings() -> Settings:
     )
 
 
-def fetch_text(url: str, timeout: int = 30) -> str:
-    request = Request(url, headers={"User-Agent": "AZON-app-ads-updater/1.0"})
+def fetch_text(
+    url: str,
+    timeout: int = 30,
+    login: str | None = None,
+    password: str | None = None,
+) -> str:
+    headers = {"User-Agent": "AZON-app-ads-updater/1.0"}
+    if login and password:
+        token = base64.b64encode(f"{login}:{password}".encode("utf-8")).decode("ascii")
+        headers["Authorization"] = f"Basic {token}"
+    request = Request(url, headers=headers)
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8-sig")
+
+
+def source_access_from_env(source_name: str) -> SourceAccess:
+    key = source_name.strip().lower()
+    prefix = SOURCE_ENV_PREFIXES.get(key)
+    if not prefix:
+        known = ", ".join(sorted(SOURCE_ENV_PREFIXES))
+        raise RuntimeError(f"Unknown source {source_name!r}. Known sources: {known}")
+
+    url = os.getenv(f"{prefix}_SOURCE_URL")
+    if not url:
+        raise RuntimeError(f"Missing source secret: {prefix}_SOURCE_URL")
+
+    return SourceAccess(
+        name=key,
+        url=url,
+        login=os.getenv(f"{prefix}_LOGIN"),
+        password=os.getenv(f"{prefix}_PASSWORD"),
+    )
+
+
+def test_source_access(source_name: str) -> None:
+    source = source_access_from_env(source_name)
+    auth_state = "with login/password" if source.login and source.password else "without auth"
+    logging.info("Testing %s source access %s.", source.name, auth_state)
+    text = fetch_text(source.url, login=source.login, password=source.password)
+    lines = text.splitlines()
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    logging.info(
+        "%s source fetched successfully: %s bytes, %s lines, sha256=%s",
+        source.name,
+        len(text.encode("utf-8")),
+        len(lines),
+        digest,
+    )
+    for index, line in enumerate(lines[:5], start=1):
+        logging.info("%s line %s: %s", source.name, index, line[:300])
 
 
 def parse_date_from_line(line: str) -> date | None:
@@ -512,6 +571,7 @@ def main() -> int:
     parser.add_argument("--test-wix", action="store_true", help="Read Wix ads.txt through the API without updating.")
     parser.add_argument("--test-wix-write", action="store_true", help="Read Wix ads.txt, write the same content back, and verify.")
     parser.add_argument("--test-wix-sites", action="store_true", help="Check whether WIX_SITE_ID is visible to the Wix API key/account.")
+    parser.add_argument("--test-source", help="Fetch one configured source without updating, for example: mintegral.")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging.")
     args = parser.parse_args()
 
@@ -529,6 +589,9 @@ def main() -> int:
             return 0
         if args.test_wix_sites:
             test_wix_site_access(env_settings())
+            return 0
+        if args.test_source:
+            test_source_access(args.test_source)
             return 0
         today_override = date.fromisoformat(args.today) if args.today else None
         return run(env_settings(), dry_run=args.dry_run, today_override=today_override)
