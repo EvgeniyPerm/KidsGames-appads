@@ -57,6 +57,7 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(source.login, "user")
         self.assertEqual(source.password, "password")
         self.assertEqual(source.headers, {})
+        self.assertTrue(source.use_basic_auth)
 
     def test_source_access_from_env_reads_unity_headers(self) -> None:
         env = {
@@ -70,6 +71,8 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(source.name, "unity")
         self.assertEqual(source.headers["Authorization"], "Bearer token")
         self.assertEqual(source.headers["Cookie"], "session=value")
+        self.assertEqual(source.headers["Accept"], "application/json, text/plain, */*")
+        self.assertFalse(source.use_basic_auth)
 
     def test_source_access_from_env_rejects_unknown_source(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "Unknown source"):

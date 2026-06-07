@@ -123,6 +123,7 @@ class SourceAccess:
     login: str | None
     password: str | None
     headers: dict[str, str]
+    use_basic_auth: bool
 
 
 def month_day_year(value: date) -> str:
@@ -199,11 +200,12 @@ def fetch_text(
     login: str | None = None,
     password: str | None = None,
     extra_headers: dict[str, str] | None = None,
+    use_basic_auth: bool = True,
 ) -> str:
     headers = {"User-Agent": "AZON-app-ads-updater/1.0"}
     if extra_headers:
         headers.update(extra_headers)
-    if login and password:
+    if use_basic_auth and login and password and "Authorization" not in headers:
         token = base64.b64encode(f"{login}:{password}".encode("utf-8")).decode("ascii")
         headers["Authorization"] = f"Basic {token}"
     request = Request(url, headers=headers)
@@ -222,12 +224,17 @@ def source_access_from_env(source_name: str) -> SourceAccess:
     if not url:
         raise RuntimeError(f"Missing source secret: {prefix}_SOURCE_URL")
 
+    headers = source_headers_from_env(prefix)
+    if key == "unity":
+        headers.setdefault("Accept", "application/json, text/plain, */*")
+
     return SourceAccess(
         name=key,
         url=url,
         login=os.getenv(f"{prefix}_LOGIN"),
         password=os.getenv(f"{prefix}_PASSWORD"),
-        headers=source_headers_from_env(prefix),
+        headers=headers,
+        use_basic_auth=key != "unity",
     )
 
 
@@ -363,6 +370,7 @@ def fetch_mintegral_markdown_doc(source: SourceAccess) -> str:
         login=source.login,
         password=source.password,
         extra_headers=source.headers,
+        use_basic_auth=source.use_basic_auth,
     )
     doc_path = mintegral_doc_path_from_menu(menu_text, MINTEGRAL_DOC_KEY, MINTEGRAL_DOC_LANG)
     errors: list[str] = []
@@ -370,7 +378,13 @@ def fetch_mintegral_markdown_doc(source: SourceAccess) -> str:
         doc_url = f"{base_url}/{doc_path}/index.md"
         try:
             logging.info("Fetching Mintegral markdown doc %s.", doc_url)
-            return fetch_text(doc_url, login=source.login, password=source.password, extra_headers=source.headers)
+            return fetch_text(
+                doc_url,
+                login=source.login,
+                password=source.password,
+                extra_headers=source.headers,
+                use_basic_auth=source.use_basic_auth,
+            )
         except (HTTPError, URLError, TimeoutError) as exc:
             errors.append(f"{doc_url}: {exc}")
     raise RuntimeError("Could not fetch Mintegral markdown doc. " + " | ".join(errors))
@@ -430,6 +444,7 @@ def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
                     login=source.login,
                     password=source.password,
                     extra_headers=source.headers,
+                    use_basic_auth=source.use_basic_auth,
                 )
             except (HTTPError, URLError, TimeoutError, ValueError) as exc:
                 logging.warning("Could not fetch Mintegral script %s: %s", script_url, exc)
@@ -503,9 +518,20 @@ def extract_unity_source_text(raw_text: str) -> str:
 
 def test_source_access(source_name: str) -> None:
     source = source_access_from_env(source_name)
-    auth_state = "with login/password" if source.login and source.password else "without auth"
+    if source.headers:
+        auth_state = "with custom headers"
+    elif source.use_basic_auth and source.login and source.password:
+        auth_state = "with login/password"
+    else:
+        auth_state = "without auth"
     logging.info("Testing %s source access %s.", source.name, auth_state)
-    raw_text = fetch_text(source.url, login=source.login, password=source.password, extra_headers=source.headers)
+    raw_text = fetch_text(
+        source.url,
+        login=source.login,
+        password=source.password,
+        extra_headers=source.headers,
+        use_basic_auth=source.use_basic_auth,
+    )
     text = extract_source_text(source, raw_text)
     lines = text.splitlines()
     if not looks_like_ads_txt(text):
@@ -601,6 +627,7 @@ def fetch_extra_source_texts(source_names: Iterable[str]) -> list[tuple[str, str
             login=source.login,
             password=source.password,
             extra_headers=source.headers,
+            use_basic_auth=source.use_basic_auth,
         )
         text = extract_source_text(source, raw_text)
         if not looks_like_ads_txt(text):
