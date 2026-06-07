@@ -59,6 +59,36 @@ class AppAdsUpdaterTest(unittest.TestCase):
         text = "<!DOCTYPE html>\n<html lang=\"en\">\n"
         self.assertFalse(updater.looks_like_ads_txt(text))
 
+    def test_extract_mintegral_ads_txt_from_html_block(self) -> None:
+        html = """
+        <!DOCTYPE html>
+        <html>
+          <body>
+            <p>Please replace your PublisherID with your actual publisher id acquired from Mintegral dashboard.</p>
+            <pre>
+              mintegral.com, your PublisherID, DIRECT, 0aeed750c80d6423
+              example.com, 123, RESELLER, abc
+              aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b
+              ignored.com, 123, RESELLER
+            </pre>
+          </body>
+        </html>
+        """
+
+        output = updater.extract_mintegral_ads_txt(html)
+
+        self.assertEqual(
+            output,
+            "\n".join(
+                [
+                    "mintegral.com, 47780, DIRECT, 0aeed750c80d6423",
+                    "example.com, 123, RESELLER, abc",
+                    "aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b",
+                    "",
+                ]
+            ),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

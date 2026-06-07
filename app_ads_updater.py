@@ -4,6 +4,7 @@ import argparse
 import base64
 import ftplib
 import hashlib
+import html
 import json
 import logging
 import os
@@ -58,6 +59,10 @@ MONTHS = {
 SOURCE_ENV_PREFIXES = {
     "mintegral": "MINTEGRAL",
 }
+
+MINTEGRAL_MARKER = "Please replace your PublisherID with your actual publisher id acquired from Mintegral dashboard."
+MINTEGRAL_PUBLISHER_ID = "47780"
+MINTEGRAL_STOP_LINE = "aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b"
 
 
 AZON_LINES = (
@@ -213,11 +218,60 @@ def looks_like_ads_txt(text: str) -> bool:
     return False
 
 
+def is_ads_txt_line(line: str) -> bool:
+    parts = [part.strip() for part in line.split(",")]
+    return len(parts) >= 3 and parts[2].upper() in {"DIRECT", "RESELLER"}
+
+
+def html_to_text(value: str) -> str:
+    with_breaks = re.sub(r"(?i)<\s*br\s*/?\s*>", "\n", value)
+    with_breaks = re.sub(r"(?i)</\s*(p|div|tr|li|pre|code|textarea)\s*>", "\n", with_breaks)
+    without_tags = re.sub(r"<[^>]+>", "", with_breaks)
+    return html.unescape(without_tags)
+
+
+def extract_mintegral_ads_txt(raw_text: str) -> str:
+    text = html_to_text(raw_text) if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")) else raw_text
+    marker_index = text.find(MINTEGRAL_MARKER)
+    if marker_index < 0:
+        raise RuntimeError("Mintegral marker text was not found in source page.")
+
+    after_marker = text[marker_index + len(MINTEGRAL_MARKER) :]
+    output_lines: list[str] = []
+    stop_found = False
+
+    for raw_line in after_marker.splitlines():
+        line = " ".join(raw_line.strip().split())
+        if not line:
+            continue
+        line = line.replace("your PublisherID", MINTEGRAL_PUBLISHER_ID)
+        if not is_ads_txt_line(line):
+            continue
+        output_lines.append(line)
+        if line.startswith(MINTEGRAL_STOP_LINE):
+            stop_found = True
+            break
+
+    if not output_lines:
+        raise RuntimeError("Mintegral ads block was found, but no app-ads.txt lines were extracted.")
+    if not stop_found:
+        raise RuntimeError(f"Mintegral stop line was not found: {MINTEGRAL_STOP_LINE}")
+
+    return "\n".join(output_lines) + "\n"
+
+
+def extract_source_text(source: SourceAccess, raw_text: str) -> str:
+    if source.name == "mintegral":
+        return extract_mintegral_ads_txt(raw_text)
+    return raw_text
+
+
 def test_source_access(source_name: str) -> None:
     source = source_access_from_env(source_name)
     auth_state = "with login/password" if source.login and source.password else "without auth"
     logging.info("Testing %s source access %s.", source.name, auth_state)
-    text = fetch_text(source.url, login=source.login, password=source.password)
+    raw_text = fetch_text(source.url, login=source.login, password=source.password)
+    text = extract_source_text(source, raw_text)
     lines = text.splitlines()
     if not looks_like_ads_txt(text):
         preview = " | ".join(line[:120] for line in lines[:3])
@@ -232,6 +286,11 @@ def test_source_access(source_name: str) -> None:
     )
     for index, line in enumerate(lines[:5], start=1):
         logging.info("%s line %s: %s", source.name, index, line[:300])
+    if len(lines) > 5:
+        tail = lines[-5:]
+        tail_start = len(lines) - len(tail) + 1
+        for index, line in enumerate(tail, start=tail_start):
+            logging.info("%s line %s: %s", source.name, index, line[:300])
 
 
 def parse_date_from_line(line: str) -> date | None:
