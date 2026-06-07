@@ -70,6 +70,7 @@ MINTEGRAL_DOC_BASE_URLS = (
 )
 MINTEGRAL_DOC_KEY = "sdk-m_sdk-about_ads"
 MINTEGRAL_DOC_LANG = "en"
+MINTEGRAL_STATIC_PATH = Path("sources/mintegral_app_ads.txt")
 MINTEGRAL_STOP_LINE = "aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b"
 MINTEGRAL_MARKER_PATTERN = re.compile(
     r"please\s+replace\s+your\s+publisherid\s+with\s+your\s+actual\s+publisher\s+id\s+acquired\s+from\s+mintegral\s+dashboard\.?",
@@ -250,6 +251,10 @@ def replace_mintegral_publisher_id(line: str) -> str:
     return re.sub(r"your\s+PublisherID", MINTEGRAL_PUBLISHER_ID, line, flags=re.IGNORECASE)
 
 
+def is_mintegral_block_line(line: str) -> bool:
+    return is_ads_txt_line(line) or line.lower().startswith("inventorypartnerdomain=")
+
+
 def extract_mintegral_ads_txt(raw_text: str) -> str:
     text = html_to_text(raw_text) if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")) else raw_text
     marker_match = MINTEGRAL_MARKER_PATTERN.search(text)
@@ -269,13 +274,17 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
     stop_found = False
 
     if not regex_only:
+        collecting = False
         for raw_line in after_marker.splitlines():
-            line = " ".join(raw_line.strip().split())
+            line = raw_line.strip()
             if not line:
                 continue
-            line = replace_mintegral_publisher_id(line)
-            if not is_ads_txt_line(line):
+            if line.startswith("```"):
                 continue
+            line = replace_mintegral_publisher_id(line)
+            if not collecting and not is_mintegral_block_line(line):
+                continue
+            collecting = True
             output_lines.append(line)
             if line.lower() == MINTEGRAL_STOP_LINE.lower():
                 stop_found = True
@@ -297,6 +306,16 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
         raise RuntimeError(f"Mintegral stop line was not found: {MINTEGRAL_STOP_LINE}")
 
     return "\n".join(output_lines) + "\n"
+
+
+def static_mintegral_ads_txt() -> str | None:
+    if not MINTEGRAL_STATIC_PATH.exists():
+        return None
+    lines = [
+        replace_mintegral_publisher_id(line.rstrip())
+        for line in MINTEGRAL_STATIC_PATH.read_text(encoding="utf-8-sig").splitlines()
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def mintegral_doc_path_from_menu(menu_text: str, doc_key: str, lang: str) -> str:
@@ -363,6 +382,10 @@ def decode_javascript_unicode_escapes(value: str) -> str:
 
 
 def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
+    static_text = static_mintegral_ads_txt()
+    if static_text is not None:
+        return static_text
+
     try:
         markdown_text = fetch_mintegral_markdown_doc(source)
         return extract_mintegral_ads_txt(markdown_text)

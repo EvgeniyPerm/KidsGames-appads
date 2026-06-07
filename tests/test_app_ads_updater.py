@@ -1,5 +1,6 @@
 from datetime import date
 import os
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -120,6 +121,24 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertIn("example.com, keep-this, RESELLER\n", output)
         self.assertTrue(output.endswith("aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b\n"))
 
+    def test_extract_mintegral_ads_txt_preserves_block_lines_as_is(self) -> None:
+        text = """
+        Please replace your PublisherID with your actual publisher id acquired from Mintegral dashboard.
+        ```java
+        mintegral.com, your PublisherID, DIRECT, 0aeed750c80d6423
+        inventorypartnerdomain=thunder-monetize.com
+        vidoomy.com,7646534,RESELLER
+        adform.com , 2742 , RESELLER
+        aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b
+        ```
+        """
+
+        output = updater.extract_mintegral_ads_txt(text)
+
+        self.assertIn("inventorypartnerdomain=thunder-monetize.com\n", output)
+        self.assertIn("vidoomy.com,7646534,RESELLER\n", output)
+        self.assertIn("adform.com , 2742 , RESELLER\n", output)
+
     def test_linked_javascript_urls_resolves_relative_urls(self) -> None:
         html = """<script src="/assets/app.js"></script><script src="chunk.js"></script>"""
 
@@ -138,6 +157,25 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(
             updater.mintegral_doc_path_from_menu(menu, "sdk-m_sdk-about_ads", "en"),
             "1744799369",
+        )
+
+    def test_static_mintegral_ads_txt_preserves_lines(self) -> None:
+        static_path = Path("tests_tmp_mintegral.txt")
+        static_path.write_text(
+            "mintegral.com, your PublisherID, DIRECT, 0aeed750c80d6423\n"
+            "vidoomy.com,7646534,RESELLER\n",
+            encoding="utf-8",
+        )
+        try:
+            with patch.object(updater, "MINTEGRAL_STATIC_PATH", static_path):
+                output = updater.static_mintegral_ads_txt()
+        finally:
+            static_path.unlink()
+
+        self.assertEqual(
+            output,
+            "mintegral.com, 47780, DIRECT, 0aeed750c80d6423\n"
+            "vidoomy.com,7646534,RESELLER\n",
         )
 
 
