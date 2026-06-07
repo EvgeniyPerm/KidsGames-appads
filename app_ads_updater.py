@@ -68,7 +68,7 @@ MINTEGRAL_MARKER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 ADS_LINE_PATTERN = re.compile(
-    r"([a-z0-9.-]+\.[a-z]{2,}\s*,\s*(?:your\s+PublisherID|[^,\s<]+)\s*,\s*(?:DIRECT|RESELLER)(?:\s*,\s*[^,\r\n<]+)?)",
+    r"([a-z0-9.-]+\.[a-z]{2,}\s*,\s*(?:your\s+PublisherID|[^,\s<]+)\s*,\s*(?:DIRECT|RESELLER)(?:\s*,\s*[^,\s<]+)?)",
     re.IGNORECASE,
 )
 
@@ -245,28 +245,33 @@ def replace_mintegral_publisher_id(line: str) -> str:
 def extract_mintegral_ads_txt(raw_text: str) -> str:
     text = html_to_text(raw_text) if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")) else raw_text
     marker_match = MINTEGRAL_MARKER_PATTERN.search(text)
+    regex_only = False
     if marker_match:
         after_marker = text[marker_match.end() :]
     else:
-        publisher_id_index = text.lower().find("your publisherid")
+        normalized_text = " ".join(text.split())
+        publisher_id_index = normalized_text.lower().find("your publisherid")
         if publisher_id_index < 0:
-            raise RuntimeError("Mintegral marker text was not found in source page.")
-        line_start = text.rfind("\n", 0, publisher_id_index) + 1
-        after_marker = text[line_start:]
+            preview_lines = [line.strip() for line in text.splitlines() if line.strip()][:10]
+            preview = " | ".join(line[:160] for line in preview_lines)
+            raise RuntimeError(f"Mintegral marker text was not found in source page. Text preview: {preview}")
+        after_marker = normalized_text[max(0, publisher_id_index - 80) :]
+        regex_only = True
     output_lines: list[str] = []
     stop_found = False
 
-    for raw_line in after_marker.splitlines():
-        line = " ".join(raw_line.strip().split())
-        if not line:
-            continue
-        line = replace_mintegral_publisher_id(line)
-        if not is_ads_txt_line(line):
-            continue
-        output_lines.append(line)
-        if line.startswith(MINTEGRAL_STOP_LINE):
-            stop_found = True
-            break
+    if not regex_only:
+        for raw_line in after_marker.splitlines():
+            line = " ".join(raw_line.strip().split())
+            if not line:
+                continue
+            line = replace_mintegral_publisher_id(line)
+            if not is_ads_txt_line(line):
+                continue
+            output_lines.append(line)
+            if line.startswith(MINTEGRAL_STOP_LINE):
+                stop_found = True
+                break
 
     if not stop_found:
         output_lines = []
