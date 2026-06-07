@@ -63,7 +63,14 @@ SOURCE_ENV_PREFIXES = {
 
 MINTEGRAL_MARKER = "Please replace your PublisherID with your actual publisher id acquired from Mintegral dashboard."
 MINTEGRAL_PUBLISHER_ID = "47780"
-MINTEGRAL_STOP_LINE = "aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b"
+MINTEGRAL_DOC_MENU_URL = "https://cdn-adn.rayjump.com/cdn-adn/v2/markdown_v2/js/file_v2.js"
+MINTEGRAL_DOC_BASE_URLS = (
+    "https://cdn-mtg-markdown.rayjump.com/cdn-adn/v2/markdown_v2/docs",
+    "https://cdn-adn-https-new.rayjump.com/cdn-adn/v2/markdown_v2/docs",
+)
+MINTEGRAL_DOC_KEY = "sdk-m_sdk-about_ads"
+MINTEGRAL_DOC_LANG = "en"
+MINTEGRAL_STOP_LINE_PREFIX = "aniview.com,"
 MINTEGRAL_MARKER_PATTERN = re.compile(
     r"please\s+replace\s+your\s+publisherid\s+with\s+your\s+actual\s+publisher\s+id\s+acquired\s+from\s+mintegral\s+dashboard\.?",
     re.IGNORECASE,
@@ -270,7 +277,7 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
             if not is_ads_txt_line(line):
                 continue
             output_lines.append(line)
-            if line.startswith(MINTEGRAL_STOP_LINE):
+            if line.lower().startswith(MINTEGRAL_STOP_LINE_PREFIX):
                 stop_found = True
                 break
 
@@ -280,16 +287,53 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
             line = " ".join(match.group(1).strip().split())
             line = replace_mintegral_publisher_id(line)
             output_lines.append(line)
-            if line.startswith(MINTEGRAL_STOP_LINE):
+            if line.lower().startswith(MINTEGRAL_STOP_LINE_PREFIX):
                 stop_found = True
                 break
 
     if not output_lines:
         raise RuntimeError("Mintegral ads block was found, but no app-ads.txt lines were extracted.")
     if not stop_found:
-        raise RuntimeError(f"Mintegral stop line was not found: {MINTEGRAL_STOP_LINE}")
+        raise RuntimeError(f"Mintegral stop line was not found: {MINTEGRAL_STOP_LINE_PREFIX}")
 
     return "\n".join(output_lines) + "\n"
+
+
+def mintegral_doc_path_from_menu(menu_text: str, doc_key: str, lang: str) -> str:
+    match = re.search(r"var\s+docSet\s*=\s*(\[.*?\]);", menu_text, re.DOTALL)
+    if not match:
+        raise RuntimeError("Could not find Mintegral docSet menu data.")
+
+    nodes = json.loads(match.group(1))
+    current_nodes: object = nodes
+    for key in doc_key.split("-"):
+        if not isinstance(current_nodes, list):
+            raise RuntimeError(f"Could not resolve Mintegral doc key: {doc_key}")
+        node = next((item for item in current_nodes if isinstance(item, dict) and item.get("key") == key), None)
+        if not isinstance(node, dict):
+            raise RuntimeError(f"Could not resolve Mintegral doc key: {doc_key}")
+        current_nodes = node.get("data") or node.get("language") or []
+
+    if not isinstance(current_nodes, list):
+        raise RuntimeError(f"Could not resolve Mintegral doc language: {lang}")
+    language = next((item for item in current_nodes if isinstance(item, dict) and item.get("key") == lang), None)
+    if not isinstance(language, dict) or not isinstance(language.get("path"), str):
+        raise RuntimeError(f"Could not resolve Mintegral doc language: {lang}")
+    return language["path"]
+
+
+def fetch_mintegral_markdown_doc(source: SourceAccess) -> str:
+    menu_text = fetch_text(MINTEGRAL_DOC_MENU_URL, login=source.login, password=source.password)
+    doc_path = mintegral_doc_path_from_menu(menu_text, MINTEGRAL_DOC_KEY, MINTEGRAL_DOC_LANG)
+    errors: list[str] = []
+    for base_url in MINTEGRAL_DOC_BASE_URLS:
+        doc_url = f"{base_url}/{doc_path}/index.md"
+        try:
+            logging.info("Fetching Mintegral markdown doc %s.", doc_url)
+            return fetch_text(doc_url, login=source.login, password=source.password)
+        except (HTTPError, URLError, TimeoutError) as exc:
+            errors.append(f"{doc_url}: {exc}")
+    raise RuntimeError("Could not fetch Mintegral markdown doc. " + " | ".join(errors))
 
 
 def linked_javascript_urls(page_url: str, html_text: str) -> list[str]:
@@ -319,6 +363,12 @@ def decode_javascript_unicode_escapes(value: str) -> str:
 
 
 def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
+    try:
+        markdown_text = fetch_mintegral_markdown_doc(source)
+        return extract_mintegral_ads_txt(markdown_text)
+    except RuntimeError as markdown_error:
+        logging.warning("Could not extract Mintegral markdown doc directly: %s", markdown_error)
+
     try:
         return extract_mintegral_ads_txt(raw_text)
     except RuntimeError as first_error:

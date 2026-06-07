@@ -113,6 +113,18 @@ class AppAdsUpdaterTest(unittest.TestCase):
             ["https://example.com/assets/app.js", "https://example.com/docs/chunk.js"],
         )
 
+    def test_mintegral_doc_path_from_menu_resolves_about_ads(self) -> None:
+        menu = (
+            'var docSet = [{"key":"sdk","data":[{"key":"m_sdk","data":['
+            '{"key":"about_ads","language":[{"key":"en","path":"1744799369"}]}'
+            "]}]}];"
+        )
+
+        self.assertEqual(
+            updater.mintegral_doc_path_from_menu(menu, "sdk-m_sdk-about_ads", "en"),
+            "1744799369",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
