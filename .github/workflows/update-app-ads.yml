@@ -92,6 +92,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
           UNITY_AUTHORIZATION: ${{ secrets.UNITY_AUTHORIZATION }}
           UNITY_COOKIE: ${{ secrets.UNITY_COOKIE }}
+          UNITY_PUBLISHER_WEB_URL: ${{ secrets.UNITY_PUBLISHER_WEB_URL || 'https://www.kidsgames.top/app-ads.txt' }}
           EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE) && 'mintegral,unity') || 'mintegral' }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}

@@ -124,6 +124,8 @@ class SourceAccess:
     password: str | None
     headers: dict[str, str]
     use_basic_auth: bool
+    method: str
+    payload: bytes | None
 
 
 def month_day_year(value: date) -> str:
@@ -201,6 +203,8 @@ def fetch_text(
     password: str | None = None,
     extra_headers: dict[str, str] | None = None,
     use_basic_auth: bool = True,
+    method: str = "GET",
+    payload: bytes | None = None,
 ) -> str:
     headers = {"User-Agent": "AZON-app-ads-updater/1.0"}
     if extra_headers:
@@ -208,7 +212,7 @@ def fetch_text(
     if use_basic_auth and login and password and "Authorization" not in headers:
         token = base64.b64encode(f"{login}:{password}".encode("utf-8")).decode("ascii")
         headers["Authorization"] = f"Basic {token}"
-    request = Request(url, headers=headers)
+    request = Request(url, data=payload, headers=headers, method=method)
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8-sig")
 
@@ -225,8 +229,16 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         raise RuntimeError(f"Missing source secret: {prefix}_SOURCE_URL")
 
     headers = source_headers_from_env(prefix)
+    method = "GET"
+    payload = None
     if key == "unity":
         headers.setdefault("Accept", "application/json, text/plain, */*")
+        headers.setdefault("Content-Type", "application/json")
+        headers.setdefault("Origin", "https://cloud.unity.com")
+        headers.setdefault("x-client-id", "unity-dashboard")
+        method = "POST"
+        publisher_web_url = os.getenv("UNITY_PUBLISHER_WEB_URL", "https://www.kidsgames.top/app-ads.txt")
+        payload = json.dumps({"publisherWebUrl": publisher_web_url}).encode("utf-8")
 
     return SourceAccess(
         name=key,
@@ -235,6 +247,8 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         password=os.getenv(f"{prefix}_PASSWORD"),
         headers=headers,
         use_basic_auth=key != "unity",
+        method=method,
+        payload=payload,
     )
 
 
@@ -371,6 +385,8 @@ def fetch_mintegral_markdown_doc(source: SourceAccess) -> str:
         password=source.password,
         extra_headers=source.headers,
         use_basic_auth=source.use_basic_auth,
+        method=source.method,
+        payload=source.payload,
     )
     doc_path = mintegral_doc_path_from_menu(menu_text, MINTEGRAL_DOC_KEY, MINTEGRAL_DOC_LANG)
     errors: list[str] = []
@@ -535,6 +551,8 @@ def test_source_access(source_name: str) -> None:
         password=source.password,
         extra_headers=source.headers,
         use_basic_auth=source.use_basic_auth,
+        method=source.method,
+        payload=source.payload,
     )
     text = extract_source_text(source, raw_text)
     lines = text.splitlines()
@@ -632,6 +650,8 @@ def fetch_extra_source_texts(source_names: Iterable[str]) -> list[tuple[str, str
             password=source.password,
             extra_headers=source.headers,
             use_basic_auth=source.use_basic_auth,
+            method=source.method,
+            payload=source.payload,
         )
         text = extract_source_text(source, raw_text)
         if not looks_like_ads_txt(text):

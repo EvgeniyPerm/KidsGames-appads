@@ -72,7 +72,12 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(source.headers["Authorization"], "Bearer token")
         self.assertEqual(source.headers["Cookie"], "session=value")
         self.assertEqual(source.headers["Accept"], "application/json, text/plain, */*")
+        self.assertEqual(source.headers["Content-Type"], "application/json")
+        self.assertEqual(source.headers["Origin"], "https://cloud.unity.com")
+        self.assertEqual(source.headers["x-client-id"], "unity-dashboard")
         self.assertFalse(source.use_basic_auth)
+        self.assertEqual(source.method, "POST")
+        self.assertEqual(source.payload, b'{"publisherWebUrl": "https://www.kidsgames.top/app-ads.txt"}')
 
     def test_source_access_from_env_rejects_unknown_source(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "Unknown source"):
