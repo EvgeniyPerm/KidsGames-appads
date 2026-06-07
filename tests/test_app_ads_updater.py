@@ -123,6 +123,27 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertIn("unity.com, 1579076, DIRECT, 96cabb5fbdde37a7\n", output)
         self.assertIn("themediagrid.com, FALINO, RESELLER, 9fac4a4a87c2a44f\n", output)
 
+    def test_extract_unity_source_text_accepts_dashboard_html(self) -> None:
+        text = """
+        <!DOCTYPE html>
+        <html>
+          <body>
+            <div>View the full list of values that should be included in your app-ads.txt file below:</div>
+            <div>
+              adagio.io, 1522, RESELLER
+              adform.com, 3400, RESELLER, 9f5210a2f0999e32
+              app-stock.com, 358747, RESELLER
+            </div>
+          </body>
+        </html>
+        """
+
+        output = updater.extract_unity_source_text(text)
+
+        self.assertIn("adagio.io, 1522, RESELLER\n", output)
+        self.assertIn("adform.com, 3400, RESELLER, 9f5210a2f0999e32\n", output)
+        self.assertIn("app-stock.com, 358747, RESELLER\n", output)
+
     def test_extract_mintegral_ads_txt_from_html_block(self) -> None:
         html = """
         <!DOCTYPE html>

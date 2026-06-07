@@ -506,9 +506,13 @@ def extract_unity_source_text(raw_text: str) -> str:
     try:
         payload = json.loads(raw_text)
     except json.JSONDecodeError as exc:
-        preview_lines = [line.strip() for line in raw_text.splitlines() if line.strip()][:10]
+        text = html_to_text(raw_text) if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")) else raw_text
+        lines = extract_ads_lines_from_json_value(text)
+        if lines:
+            return normalize_ads_txt_lines(lines)
+        preview_lines = [line.strip() for line in text.splitlines() if line.strip()][:10]
         preview = " | ".join(line[:160] for line in preview_lines)
-        raise RuntimeError(f"Unity source is not app-ads.txt text or JSON. Text preview: {preview}") from exc
+        raise RuntimeError(f"Unity source is not app-ads.txt text, JSON, or HTML with app-ads.txt lines. Text preview: {preview}") from exc
 
     lines = extract_ads_lines_from_json_value(payload)
     if not lines:
