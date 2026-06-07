@@ -295,11 +295,17 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
 def linked_javascript_urls(page_url: str, html_text: str) -> list[str]:
     urls: list[str] = []
     for match in re.finditer(r"""(?i)<script[^>]+src=["']([^"']+)["']""", html_text):
-        url = urljoin(page_url, html.unescape(match.group(1)))
+        raw_url = html.unescape(match.group(1)).strip()
+        if any(ord(char) < 32 for char in raw_url) or any(char.isspace() for char in raw_url):
+            continue
+        url = urljoin(page_url, raw_url)
         if url not in urls:
             urls.append(url)
     for match in re.finditer(r"""["']([^"']+\.js(?:\?[^"']*)?)["']""", html_text, re.IGNORECASE):
-        url = urljoin(page_url, html.unescape(match.group(1)))
+        raw_url = html.unescape(match.group(1)).strip()
+        if any(ord(char) < 32 for char in raw_url) or any(char.isspace() for char in raw_url):
+            continue
+        url = urljoin(page_url, raw_url)
         if url not in urls:
             urls.append(url)
     return urls
@@ -332,7 +338,7 @@ def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
             seen_scripts.add(script_url)
             try:
                 script_text = fetch_text(script_url, login=source.login, password=source.password)
-            except (HTTPError, URLError, TimeoutError) as exc:
+            except (HTTPError, URLError, TimeoutError, ValueError) as exc:
                 logging.warning("Could not fetch Mintegral script %s: %s", script_url, exc)
                 continue
             decoded_script = decode_javascript_unicode_escapes(script_text)
