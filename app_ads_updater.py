@@ -298,6 +298,10 @@ def linked_javascript_urls(page_url: str, html_text: str) -> list[str]:
         url = urljoin(page_url, html.unescape(match.group(1)))
         if url not in urls:
             urls.append(url)
+    for match in re.finditer(r"""["']([^"']+\.js(?:\?[^"']*)?)["']""", html_text, re.IGNORECASE):
+        url = urljoin(page_url, html.unescape(match.group(1)))
+        if url not in urls:
+            urls.append(url)
     return urls
 
 
@@ -316,15 +320,27 @@ def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
         if not scripts:
             raise first_error
 
-        logging.info("Mintegral block was not in the page HTML; checking %s linked script(s).", len(scripts))
+        logging.info("Mintegral block was not in the page HTML; checking linked script chunks.")
         script_texts: list[str] = []
-        for script_url in scripts[:20]:
+        seen_scripts: set[str] = set()
+        script_index = 0
+        while script_index < len(scripts) and len(seen_scripts) < 100:
+            script_url = scripts[script_index]
+            script_index += 1
+            if script_url in seen_scripts:
+                continue
+            seen_scripts.add(script_url)
             try:
                 script_text = fetch_text(script_url, login=source.login, password=source.password)
             except (HTTPError, URLError, TimeoutError) as exc:
                 logging.warning("Could not fetch Mintegral script %s: %s", script_url, exc)
                 continue
-            script_texts.append(decode_javascript_unicode_escapes(script_text))
+            decoded_script = decode_javascript_unicode_escapes(script_text)
+            script_texts.append(decoded_script)
+            for nested_url in linked_javascript_urls(script_url, decoded_script):
+                if nested_url not in seen_scripts and nested_url not in scripts:
+                    scripts.append(nested_url)
+        logging.info("Checked %s Mintegral script chunk(s).", len(seen_scripts))
 
         if not script_texts:
             raise first_error
