@@ -121,8 +121,8 @@ class AppAdsUpdaterTest(unittest.TestCase):
         output = updater.extract_mintegral_ads_txt(html)
 
         self.assertIn("example.com, keep-this, RESELLER\n", output)
-        self.assertTrue(output.endswith("unknown-last.com, 123, RESELLER\n"))
-        self.assertNotIn("ignored.com, 123, RESELLER", output)
+        self.assertIn("unknown-last.com, 123, RESELLER\n", output)
+        self.assertTrue(output.endswith("ignored.com, 123, RESELLER\n"))
 
     def test_extract_mintegral_ads_txt_preserves_block_lines_as_is(self) -> None:
         text = """

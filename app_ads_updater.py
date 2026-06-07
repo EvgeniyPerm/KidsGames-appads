@@ -283,16 +283,12 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
             if not line:
                 continue
             if line.startswith("```"):
-                if collecting:
-                    break
                 inside_fence = not inside_fence
                 continue
             line = replace_mintegral_publisher_id(line)
             if not collecting and not is_mintegral_block_line(line):
                 continue
-            if collecting and not inside_fence and not is_mintegral_block_line(line):
-                break
-            if collecting and inside_fence and not is_mintegral_block_line(line):
+            if collecting and not is_mintegral_block_line(line):
                 continue
             collecting = True
             output_lines.append(line)
