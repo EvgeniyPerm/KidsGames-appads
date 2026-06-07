@@ -63,6 +63,14 @@ SOURCE_ENV_PREFIXES = {
 MINTEGRAL_MARKER = "Please replace your PublisherID with your actual publisher id acquired from Mintegral dashboard."
 MINTEGRAL_PUBLISHER_ID = "47780"
 MINTEGRAL_STOP_LINE = "aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b"
+MINTEGRAL_MARKER_PATTERN = re.compile(
+    r"please\s+replace\s+your\s+publisherid\s+with\s+your\s+actual\s+publisher\s+id\s+acquired\s+from\s+mintegral\s+dashboard\.?",
+    re.IGNORECASE,
+)
+ADS_LINE_PATTERN = re.compile(
+    r"([a-z0-9.-]+\.[a-z]{2,}\s*,\s*(?:your\s+PublisherID|[^,\s<]+)\s*,\s*(?:DIRECT|RESELLER)(?:\s*,\s*[^,\r\n<]+)?)",
+    re.IGNORECASE,
+)
 
 
 AZON_LINES = (
@@ -230,13 +238,21 @@ def html_to_text(value: str) -> str:
     return html.unescape(without_tags)
 
 
+def replace_mintegral_publisher_id(line: str) -> str:
+    return re.sub(r"your\s+PublisherID", MINTEGRAL_PUBLISHER_ID, line, flags=re.IGNORECASE)
+
+
 def extract_mintegral_ads_txt(raw_text: str) -> str:
     text = html_to_text(raw_text) if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")) else raw_text
-    marker_index = text.find(MINTEGRAL_MARKER)
-    if marker_index < 0:
-        raise RuntimeError("Mintegral marker text was not found in source page.")
-
-    after_marker = text[marker_index + len(MINTEGRAL_MARKER) :]
+    marker_match = MINTEGRAL_MARKER_PATTERN.search(text)
+    if marker_match:
+        after_marker = text[marker_match.end() :]
+    else:
+        publisher_id_index = text.lower().find("your publisherid")
+        if publisher_id_index < 0:
+            raise RuntimeError("Mintegral marker text was not found in source page.")
+        line_start = text.rfind("\n", 0, publisher_id_index) + 1
+        after_marker = text[line_start:]
     output_lines: list[str] = []
     stop_found = False
 
@@ -244,13 +260,23 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
         line = " ".join(raw_line.strip().split())
         if not line:
             continue
-        line = line.replace("your PublisherID", MINTEGRAL_PUBLISHER_ID)
+        line = replace_mintegral_publisher_id(line)
         if not is_ads_txt_line(line):
             continue
         output_lines.append(line)
         if line.startswith(MINTEGRAL_STOP_LINE):
             stop_found = True
             break
+
+    if not stop_found:
+        output_lines = []
+        for match in ADS_LINE_PATTERN.finditer(after_marker):
+            line = " ".join(match.group(1).strip().split())
+            line = replace_mintegral_publisher_id(line)
+            output_lines.append(line)
+            if line.startswith(MINTEGRAL_STOP_LINE):
+                stop_found = True
+                break
 
     if not output_lines:
         raise RuntimeError("Mintegral ads block was found, but no app-ads.txt lines were extracted.")
