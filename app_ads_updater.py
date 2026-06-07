@@ -59,6 +59,7 @@ MONTHS = {
 
 SOURCE_ENV_PREFIXES = {
     "mintegral": "MINTEGRAL",
+    "unity": "UNITY",
 }
 
 MINTEGRAL_MARKER = "Please replace your PublisherID with your actual publisher id acquired from Mintegral dashboard."
@@ -112,6 +113,7 @@ class Settings:
     wix_account_id: str | None
     wix_enabled: bool
     verify_urls: tuple[str, ...]
+    extra_source_names: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -120,6 +122,7 @@ class SourceAccess:
     url: str
     login: str | None
     password: str | None
+    headers: dict[str, str]
 
 
 def month_day_year(value: date) -> str:
@@ -166,6 +169,11 @@ def env_settings() -> Settings:
         for item in env("VERIFY_URLS", ",".join(VERIFY_URLS)).split(",")
         if item.strip()
     )
+    extra_source_names = tuple(
+        item.strip().lower()
+        for item in env("EXTRA_SOURCES", "").split(",")
+        if item.strip()
+    )
     return Settings(
         source_url=env("SOURCE_URL", SOURCE_URL),
         timezone=env("APP_TIMEZONE", DEFAULT_TIMEZONE),
@@ -181,6 +189,7 @@ def env_settings() -> Settings:
         wix_account_id=env("WIX_ACCOUNT_ID"),
         wix_enabled=(env("WIX_ENABLED", "false") or "").lower() == "true",
         verify_urls=verify_urls,
+        extra_source_names=extra_source_names,
     )
 
 
@@ -189,8 +198,11 @@ def fetch_text(
     timeout: int = 30,
     login: str | None = None,
     password: str | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> str:
     headers = {"User-Agent": "AZON-app-ads-updater/1.0"}
+    if extra_headers:
+        headers.update(extra_headers)
     if login and password:
         token = base64.b64encode(f"{login}:{password}".encode("utf-8")).decode("ascii")
         headers["Authorization"] = f"Basic {token}"
@@ -215,12 +227,24 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         url=url,
         login=os.getenv(f"{prefix}_LOGIN"),
         password=os.getenv(f"{prefix}_PASSWORD"),
+        headers=source_headers_from_env(prefix),
     )
+
+
+def source_headers_from_env(prefix: str) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    authorization = os.getenv(f"{prefix}_AUTHORIZATION")
+    cookie = os.getenv(f"{prefix}_COOKIE")
+    if authorization:
+        headers["Authorization"] = authorization
+    if cookie:
+        headers["Cookie"] = cookie
+    return headers
 
 
 def looks_like_ads_txt(text: str) -> bool:
     stripped = text.lstrip()
-    if stripped.lower().startswith(("<!doctype html", "<html")):
+    if stripped.lower().startswith(("<!doctype html", "<html")) or stripped.startswith(("{", "[")):
         return False
 
     for line in text.splitlines():
@@ -235,7 +259,11 @@ def looks_like_ads_txt(text: str) -> bool:
 
 def is_ads_txt_line(line: str) -> bool:
     parts = [part.strip() for part in line.split(",")]
-    return len(parts) >= 3 and parts[2].upper() in {"DIRECT", "RESELLER"}
+    return (
+        len(parts) >= 3
+        and re.fullmatch(r"[A-Za-z0-9.-]+\.[A-Za-z]{2,}", parts[0]) is not None
+        and parts[2].upper() in {"DIRECT", "RESELLER"}
+    )
 
 
 def html_to_text(value: str) -> str:
@@ -330,14 +358,19 @@ def mintegral_doc_path_from_menu(menu_text: str, doc_key: str, lang: str) -> str
 
 
 def fetch_mintegral_markdown_doc(source: SourceAccess) -> str:
-    menu_text = fetch_text(MINTEGRAL_DOC_MENU_URL, login=source.login, password=source.password)
+    menu_text = fetch_text(
+        MINTEGRAL_DOC_MENU_URL,
+        login=source.login,
+        password=source.password,
+        extra_headers=source.headers,
+    )
     doc_path = mintegral_doc_path_from_menu(menu_text, MINTEGRAL_DOC_KEY, MINTEGRAL_DOC_LANG)
     errors: list[str] = []
     for base_url in MINTEGRAL_DOC_BASE_URLS:
         doc_url = f"{base_url}/{doc_path}/index.md"
         try:
             logging.info("Fetching Mintegral markdown doc %s.", doc_url)
-            return fetch_text(doc_url, login=source.login, password=source.password)
+            return fetch_text(doc_url, login=source.login, password=source.password, extra_headers=source.headers)
         except (HTTPError, URLError, TimeoutError) as exc:
             errors.append(f"{doc_url}: {exc}")
     raise RuntimeError("Could not fetch Mintegral markdown doc. " + " | ".join(errors))
@@ -392,7 +425,12 @@ def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
                 continue
             seen_scripts.add(script_url)
             try:
-                script_text = fetch_text(script_url, login=source.login, password=source.password)
+                script_text = fetch_text(
+                    script_url,
+                    login=source.login,
+                    password=source.password,
+                    extra_headers=source.headers,
+                )
             except (HTTPError, URLError, TimeoutError, ValueError) as exc:
                 logging.warning("Could not fetch Mintegral script %s: %s", script_url, exc)
                 continue
@@ -419,14 +457,55 @@ def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
 def extract_source_text(source: SourceAccess, raw_text: str) -> str:
     if source.name == "mintegral":
         return extract_mintegral_source_text(source, raw_text)
+    if source.name == "unity":
+        return extract_unity_source_text(raw_text)
     return raw_text
+
+
+def normalize_ads_txt_lines(lines: Iterable[str]) -> str:
+    output_lines = [line.strip() for line in lines if is_ads_txt_line(line.strip())]
+    if not output_lines:
+        raise RuntimeError("No app-ads.txt lines were extracted.")
+    return "\n".join(output_lines) + "\n"
+
+
+def extract_ads_lines_from_json_value(value: object) -> list[str]:
+    lines: list[str] = []
+    if isinstance(value, str):
+        for line in value.splitlines():
+            if is_ads_txt_line(line.strip()):
+                lines.append(line)
+    elif isinstance(value, list):
+        for item in value:
+            lines.extend(extract_ads_lines_from_json_value(item))
+    elif isinstance(value, dict):
+        for item in value.values():
+            lines.extend(extract_ads_lines_from_json_value(item))
+    return lines
+
+
+def extract_unity_source_text(raw_text: str) -> str:
+    if looks_like_ads_txt(raw_text):
+        return normalize_ads_txt_lines(raw_text.splitlines())
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        preview_lines = [line.strip() for line in raw_text.splitlines() if line.strip()][:10]
+        preview = " | ".join(line[:160] for line in preview_lines)
+        raise RuntimeError(f"Unity source is not app-ads.txt text or JSON. Text preview: {preview}") from exc
+
+    lines = extract_ads_lines_from_json_value(payload)
+    if not lines:
+        raise RuntimeError(f"Unity JSON response does not contain app-ads.txt lines: {payload}")
+    return normalize_ads_txt_lines(lines)
 
 
 def test_source_access(source_name: str) -> None:
     source = source_access_from_env(source_name)
     auth_state = "with login/password" if source.login and source.password else "without auth"
     logging.info("Testing %s source access %s.", source.name, auth_state)
-    raw_text = fetch_text(source.url, login=source.login, password=source.password)
+    raw_text = fetch_text(source.url, login=source.login, password=source.password, extra_headers=source.headers)
     text = extract_source_text(source, raw_text)
     lines = text.splitlines()
     if not looks_like_ads_txt(text):
@@ -493,7 +572,7 @@ def source_is_current(first_line: str, today: date) -> bool:
     return source_date in {today, today + timedelta(days=1)}
 
 
-def build_output(source_text: str, today: date) -> str:
+def build_output(source_text: str, today: date, extra_source_texts: Iterable[tuple[str, str]] = ()) -> str:
     source_lines = source_text.splitlines()
     if len(source_lines) < 2:
         raise ValueError("Source app-ads.txt has fewer than two lines.")
@@ -501,7 +580,35 @@ def build_output(source_text: str, today: date) -> str:
     source_lines[1] = "OwnerDomain=AZON.games"
     azon_text = "\n".join(line.format(date_text=month_day_year(today)) for line in AZON_LINES)
     source_part = "\n".join(source_lines)
+    extra_parts: list[str] = []
+    for name, text in extra_source_texts:
+        cleaned = text.strip()
+        if cleaned:
+            extra_parts.append(f"# {name} app-ads.txt\n{cleaned}")
+    extra_text = "\n\n".join(extra_parts)
+    if extra_text:
+        return f"{azon_text}\n{source_part}\n\n{extra_text}\n"
     return f"{azon_text}\n{source_part}\n"
+
+
+def fetch_extra_source_texts(source_names: Iterable[str]) -> list[tuple[str, str]]:
+    extra_source_texts: list[tuple[str, str]] = []
+    for source_name in source_names:
+        source = source_access_from_env(source_name)
+        logging.info("Fetching extra source %s.", source.name)
+        raw_text = fetch_text(
+            source.url,
+            login=source.login,
+            password=source.password,
+            extra_headers=source.headers,
+        )
+        text = extract_source_text(source, raw_text)
+        if not looks_like_ads_txt(text):
+            preview = " | ".join(line[:120] for line in text.splitlines()[:3])
+            raise RuntimeError(f"{source.name} source does not look like app-ads.txt. First lines: {preview}")
+        logging.info("%s extra source fetched: %s line(s).", source.name, len(text.splitlines()))
+        extra_source_texts.append((source.name.upper(), text))
+    return extra_source_texts
 
 
 def require_ftp_settings(settings: Settings) -> tuple[str, str, str]:
@@ -772,7 +879,8 @@ def run(settings: Settings, dry_run: bool = False, today_override: date | None =
         logging.info("%s checked", checked_at)
         return 0
 
-    output_text = build_output(source_text, today)
+    extra_source_texts = fetch_extra_source_texts(settings.extra_source_names)
+    output_text = build_output(source_text, today, extra_source_texts)
     output_bytes = output_text.encode("utf-8")
     dated_filename = f"{today.isoformat()} AZON app-ads.txt"
     files = {

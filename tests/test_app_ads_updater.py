@@ -30,6 +30,16 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertNotIn("Verve.com", output)
         self.assertIn("verve.com, 15290, RESELLER, 0c8f5958fc2d6270", output)
 
+    def test_build_output_appends_extra_sources(self) -> None:
+        source = "# Updated May 13, 2026\nOwnerDomain=Old.example\nnetwork.com, id, DIRECT\n"
+        output = updater.build_output(
+            source,
+            date(2026, 5, 13),
+            [("UNITY", "unity.com, 1579076, DIRECT, 96cabb5fbdde37a7\n")],
+        )
+
+        self.assertIn("# UNITY app-ads.txt\nunity.com, 1579076, DIRECT, 96cabb5fbdde37a7\n", output)
+
     def test_month_day_year_has_no_leading_zero(self) -> None:
         self.assertEqual(updater.month_day_year(date(2026, 5, 13)), "May 13, 2026")
 
@@ -46,6 +56,20 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(source.url, "https://example.com/app-ads.txt")
         self.assertEqual(source.login, "user")
         self.assertEqual(source.password, "password")
+        self.assertEqual(source.headers, {})
+
+    def test_source_access_from_env_reads_unity_headers(self) -> None:
+        env = {
+            "UNITY_SOURCE_URL": "https://services.unity.com/api/monetize/app-ads/v1/organizations/1/developers/2/missing-app-ads",
+            "UNITY_AUTHORIZATION": "Bearer token",
+            "UNITY_COOKIE": "session=value",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("unity")
+
+        self.assertEqual(source.name, "unity")
+        self.assertEqual(source.headers["Authorization"], "Bearer token")
+        self.assertEqual(source.headers["Cookie"], "session=value")
 
     def test_source_access_from_env_rejects_unknown_source(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "Unknown source"):
@@ -58,6 +82,43 @@ class AppAdsUpdaterTest(unittest.TestCase):
     def test_looks_like_ads_txt_rejects_html(self) -> None:
         text = "<!DOCTYPE html>\n<html lang=\"en\">\n"
         self.assertFalse(updater.looks_like_ads_txt(text))
+
+    def test_extract_unity_source_text_accepts_plain_ads_txt(self) -> None:
+        text = """
+        unity.com, 1579076, DIRECT, 96cabb5fbdde37a7
+        ignored
+        adform.com, 3400, RESELLER, 9f5210a2f0999e32
+        """
+
+        output = updater.extract_unity_source_text(text)
+
+        self.assertEqual(
+            output,
+            "\n".join(
+                [
+                    "unity.com, 1579076, DIRECT, 96cabb5fbdde37a7",
+                    "adform.com, 3400, RESELLER, 9f5210a2f0999e32",
+                    "",
+                ]
+            ),
+        )
+
+    def test_extract_unity_source_text_accepts_nested_json(self) -> None:
+        text = """
+        {
+          "data": {
+            "missingAppAds": [
+              "unity.com, 1579076, DIRECT, 96cabb5fbdde37a7",
+              {"line": "themediagrid.com, FALINO, RESELLER, 9fac4a4a87c2a44f"}
+            ]
+          }
+        }
+        """
+
+        output = updater.extract_unity_source_text(text)
+
+        self.assertIn("unity.com, 1579076, DIRECT, 96cabb5fbdde37a7\n", output)
+        self.assertIn("themediagrid.com, FALINO, RESELLER, 9fac4a4a87c2a44f\n", output)
 
     def test_extract_mintegral_ads_txt_from_html_block(self) -> None:
         html = """

@@ -90,6 +90,12 @@ jobs:
           MINTEGRAL_SOURCE_URL: ${{ secrets.MINTEGRAL_SOURCE_URL }}
           MINTEGRAL_LOGIN: ${{ secrets.MINTEGRAL_LOGIN }}
           MINTEGRAL_PASSWORD: ${{ secrets.MINTEGRAL_PASSWORD }}
+          UNITY_SOURCE_URL: ${{ secrets.UNITY_SOURCE_URL }}
+          UNITY_LOGIN: ${{ secrets.UNITY_LOGIN }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_AUTHORIZATION: ${{ secrets.UNITY_AUTHORIZATION }}
+          UNITY_COOKIE: ${{ secrets.UNITY_COOKIE }}
+          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || 'mintegral,unity' }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}
