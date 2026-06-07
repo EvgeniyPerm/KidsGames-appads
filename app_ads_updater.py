@@ -70,7 +70,7 @@ MINTEGRAL_DOC_BASE_URLS = (
 )
 MINTEGRAL_DOC_KEY = "sdk-m_sdk-about_ads"
 MINTEGRAL_DOC_LANG = "en"
-MINTEGRAL_STOP_LINE_PREFIX = "aniview.com,"
+MINTEGRAL_STOP_LINE = "aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b"
 MINTEGRAL_MARKER_PATTERN = re.compile(
     r"please\s+replace\s+your\s+publisherid\s+with\s+your\s+actual\s+publisher\s+id\s+acquired\s+from\s+mintegral\s+dashboard\.?",
     re.IGNORECASE,
@@ -277,7 +277,7 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
             if not is_ads_txt_line(line):
                 continue
             output_lines.append(line)
-            if line.lower().startswith(MINTEGRAL_STOP_LINE_PREFIX):
+            if line.lower() == MINTEGRAL_STOP_LINE.lower():
                 stop_found = True
                 break
 
@@ -287,14 +287,14 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
             line = " ".join(match.group(1).strip().split())
             line = replace_mintegral_publisher_id(line)
             output_lines.append(line)
-            if line.lower().startswith(MINTEGRAL_STOP_LINE_PREFIX):
+            if line.lower() == MINTEGRAL_STOP_LINE.lower():
                 stop_found = True
                 break
 
     if not output_lines:
         raise RuntimeError("Mintegral ads block was found, but no app-ads.txt lines were extracted.")
     if not stop_found:
-        raise RuntimeError(f"Mintegral stop line was not found: {MINTEGRAL_STOP_LINE_PREFIX}")
+        raise RuntimeError(f"Mintegral stop line was not found: {MINTEGRAL_STOP_LINE}")
 
     return "\n".join(output_lines) + "\n"
 

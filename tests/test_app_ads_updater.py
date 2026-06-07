@@ -105,6 +105,21 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertIn("mintegral.com, 47780, DIRECT, 0aeed750c80d6423\n", output)
         self.assertTrue(output.endswith("aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b\n"))
 
+    def test_extract_mintegral_ads_txt_does_not_stop_at_first_aniview(self) -> None:
+        html = """
+        Please replace your PublisherID with your actual publisher id acquired from Mintegral dashboard.
+        mintegral.com, your PublisherID, DIRECT, 0aeed750c80d6423
+        aniview.com, 603f65a2e291680ef30af9c7, RESELLER, 78b21b97965ec3f8
+        example.com, keep-this, RESELLER
+        aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b
+        ignored.com, 123, RESELLER
+        """
+
+        output = updater.extract_mintegral_ads_txt(html)
+
+        self.assertIn("example.com, keep-this, RESELLER\n", output)
+        self.assertTrue(output.endswith("aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b\n"))
+
     def test_linked_javascript_urls_resolves_relative_urls(self) -> None:
         html = """<script src="/assets/app.js"></script><script src="chunk.js"></script>"""
 
