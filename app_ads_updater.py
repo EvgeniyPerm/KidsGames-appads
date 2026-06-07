@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Iterable
 from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -291,9 +292,49 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
     return "\n".join(output_lines) + "\n"
 
 
+def linked_javascript_urls(page_url: str, html_text: str) -> list[str]:
+    urls: list[str] = []
+    for match in re.finditer(r"""(?i)<script[^>]+src=["']([^"']+)["']""", html_text):
+        url = urljoin(page_url, html.unescape(match.group(1)))
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
+def decode_javascript_unicode_escapes(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        return chr(int(match.group(1), 16))
+
+    return re.sub(r"\\u([0-9a-fA-F]{4})", replace, value)
+
+
+def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
+    try:
+        return extract_mintegral_ads_txt(raw_text)
+    except RuntimeError as first_error:
+        scripts = linked_javascript_urls(source.url, raw_text)
+        if not scripts:
+            raise first_error
+
+        logging.info("Mintegral block was not in the page HTML; checking %s linked script(s).", len(scripts))
+        script_texts: list[str] = []
+        for script_url in scripts[:20]:
+            try:
+                script_text = fetch_text(script_url, login=source.login, password=source.password)
+            except (HTTPError, URLError, TimeoutError) as exc:
+                logging.warning("Could not fetch Mintegral script %s: %s", script_url, exc)
+                continue
+            script_texts.append(decode_javascript_unicode_escapes(script_text))
+
+        if not script_texts:
+            raise first_error
+        combined_text = raw_text + "\n" + "\n".join(script_texts)
+        return extract_mintegral_ads_txt(combined_text)
+
+
 def extract_source_text(source: SourceAccess, raw_text: str) -> str:
     if source.name == "mintegral":
-        return extract_mintegral_ads_txt(raw_text)
+        return extract_mintegral_source_text(source, raw_text)
     return raw_text
 
 

@@ -105,6 +105,14 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertIn("mintegral.com, 47780, DIRECT, 0aeed750c80d6423\n", output)
         self.assertTrue(output.endswith("aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b\n"))
 
+    def test_linked_javascript_urls_resolves_relative_urls(self) -> None:
+        html = """<script src="/assets/app.js"></script><script src="chunk.js"></script>"""
+
+        self.assertEqual(
+            updater.linked_javascript_urls("https://example.com/docs/page", html),
+            ["https://example.com/assets/app.js", "https://example.com/docs/chunk.js"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
