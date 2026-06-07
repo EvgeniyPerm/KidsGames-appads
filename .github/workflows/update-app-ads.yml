@@ -95,7 +95,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
           UNITY_AUTHORIZATION: ${{ secrets.UNITY_AUTHORIZATION }}
           UNITY_COOKIE: ${{ secrets.UNITY_COOKIE }}
-          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || 'mintegral,unity' }}
+          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE) && 'mintegral,unity') || 'mintegral' }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}
