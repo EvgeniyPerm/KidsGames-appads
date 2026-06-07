@@ -1,6 +1,5 @@
 from datetime import date
 import os
-from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -85,6 +84,7 @@ class AppAdsUpdaterTest(unittest.TestCase):
                     "mintegral.com, 47780, DIRECT, 0aeed750c80d6423",
                     "example.com, 123, RESELLER, abc",
                     "aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b",
+                    "ignored.com, 123, RESELLER",
                     "",
                 ]
             ),
@@ -106,20 +106,23 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertIn("mintegral.com, 47780, DIRECT, 0aeed750c80d6423\n", output)
         self.assertTrue(output.endswith("aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b\n"))
 
-    def test_extract_mintegral_ads_txt_does_not_stop_at_first_aniview(self) -> None:
+    def test_extract_mintegral_ads_txt_uses_code_fence_not_known_last_line(self) -> None:
         html = """
         Please replace your PublisherID with your actual publisher id acquired from Mintegral dashboard.
+        ```java
         mintegral.com, your PublisherID, DIRECT, 0aeed750c80d6423
         aniview.com, 603f65a2e291680ef30af9c7, RESELLER, 78b21b97965ec3f8
         example.com, keep-this, RESELLER
-        aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b
+        unknown-last.com, 123, RESELLER
+        ```
         ignored.com, 123, RESELLER
         """
 
         output = updater.extract_mintegral_ads_txt(html)
 
         self.assertIn("example.com, keep-this, RESELLER\n", output)
-        self.assertTrue(output.endswith("aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b\n"))
+        self.assertTrue(output.endswith("unknown-last.com, 123, RESELLER\n"))
+        self.assertNotIn("ignored.com, 123, RESELLER", output)
 
     def test_extract_mintegral_ads_txt_preserves_block_lines_as_is(self) -> None:
         text = """
@@ -157,25 +160,6 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(
             updater.mintegral_doc_path_from_menu(menu, "sdk-m_sdk-about_ads", "en"),
             "1744799369",
-        )
-
-    def test_static_mintegral_ads_txt_preserves_lines(self) -> None:
-        static_path = Path("tests_tmp_mintegral.txt")
-        static_path.write_text(
-            "mintegral.com, your PublisherID, DIRECT, 0aeed750c80d6423\n"
-            "vidoomy.com,7646534,RESELLER\n",
-            encoding="utf-8",
-        )
-        try:
-            with patch.object(updater, "MINTEGRAL_STATIC_PATH", static_path):
-                output = updater.static_mintegral_ads_txt()
-        finally:
-            static_path.unlink()
-
-        self.assertEqual(
-            output,
-            "mintegral.com, 47780, DIRECT, 0aeed750c80d6423\n"
-            "vidoomy.com,7646534,RESELLER\n",
         )
 
 

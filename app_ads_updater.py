@@ -70,8 +70,6 @@ MINTEGRAL_DOC_BASE_URLS = (
 )
 MINTEGRAL_DOC_KEY = "sdk-m_sdk-about_ads"
 MINTEGRAL_DOC_LANG = "en"
-MINTEGRAL_STATIC_PATH = Path("sources/mintegral_app_ads.txt")
-MINTEGRAL_STOP_LINE = "aniview.com, 69d24331b4476e4a300e1584, RESELLER, 78b21b"
 MINTEGRAL_MARKER_PATTERN = re.compile(
     r"please\s+replace\s+your\s+publisherid\s+with\s+your\s+actual\s+publisher\s+id\s+acquired\s+from\s+mintegral\s+dashboard\.?",
     re.IGNORECASE,
@@ -241,8 +239,10 @@ def is_ads_txt_line(line: str) -> bool:
 
 
 def html_to_text(value: str) -> str:
-    with_breaks = re.sub(r"(?i)<\s*br\s*/?\s*>", "\n", value)
-    with_breaks = re.sub(r"(?i)</\s*(p|div|tr|li|pre|code|textarea)\s*>", "\n", with_breaks)
+    with_breaks = re.sub(r"(?i)<\s*(pre|code|textarea)(?:\s[^>]*)?>", "\n```\n", value)
+    with_breaks = re.sub(r"(?i)</\s*(pre|code|textarea)\s*>", "\n```\n", with_breaks)
+    with_breaks = re.sub(r"(?i)<\s*br\s*/?\s*>", "\n", with_breaks)
+    with_breaks = re.sub(r"(?i)</\s*(p|div|tr|li)\s*>", "\n", with_breaks)
     without_tags = re.sub(r"<[^>]+>", "", with_breaks)
     return html.unescape(without_tags)
 
@@ -262,60 +262,52 @@ def extract_mintegral_ads_txt(raw_text: str) -> str:
     if marker_match:
         after_marker = text[marker_match.end() :]
     else:
-        normalized_text = " ".join(text.split())
-        publisher_id_index = normalized_text.lower().find("your publisherid")
+        publisher_id_index = text.lower().find("your publisherid")
         if publisher_id_index < 0:
-            preview_lines = [line.strip() for line in text.splitlines() if line.strip()][:10]
-            preview = " | ".join(line[:160] for line in preview_lines)
-            raise RuntimeError(f"Mintegral marker text was not found in source page. Text preview: {preview}")
-        after_marker = normalized_text[max(0, publisher_id_index - 80) :]
-        regex_only = True
+            if looks_like_ads_txt(text):
+                after_marker = text
+            else:
+                preview_lines = [line.strip() for line in text.splitlines() if line.strip()][:10]
+                preview = " | ".join(line[:160] for line in preview_lines)
+                raise RuntimeError(f"Mintegral marker text was not found in source page. Text preview: {preview}")
+        else:
+            line_start = text.rfind("\n", 0, publisher_id_index) + 1
+            after_marker = text[line_start:]
     output_lines: list[str] = []
-    stop_found = False
 
     if not regex_only:
         collecting = False
+        inside_fence = False
         for raw_line in after_marker.splitlines():
             line = raw_line.strip()
             if not line:
                 continue
             if line.startswith("```"):
+                if collecting:
+                    break
+                inside_fence = not inside_fence
                 continue
             line = replace_mintegral_publisher_id(line)
             if not collecting and not is_mintegral_block_line(line):
                 continue
+            if collecting and not inside_fence and not is_mintegral_block_line(line):
+                break
+            if collecting and inside_fence and not is_mintegral_block_line(line):
+                continue
             collecting = True
             output_lines.append(line)
-            if line.lower() == MINTEGRAL_STOP_LINE.lower():
-                stop_found = True
-                break
 
-    if not stop_found:
+    if not output_lines:
         output_lines = []
         for match in ADS_LINE_PATTERN.finditer(after_marker):
             line = " ".join(match.group(1).strip().split())
             line = replace_mintegral_publisher_id(line)
             output_lines.append(line)
-            if line.lower() == MINTEGRAL_STOP_LINE.lower():
-                stop_found = True
-                break
 
     if not output_lines:
         raise RuntimeError("Mintegral ads block was found, but no app-ads.txt lines were extracted.")
-    if not stop_found:
-        raise RuntimeError(f"Mintegral stop line was not found: {MINTEGRAL_STOP_LINE}")
 
     return "\n".join(output_lines) + "\n"
-
-
-def static_mintegral_ads_txt() -> str | None:
-    if not MINTEGRAL_STATIC_PATH.exists():
-        return None
-    lines = [
-        replace_mintegral_publisher_id(line.rstrip())
-        for line in MINTEGRAL_STATIC_PATH.read_text(encoding="utf-8-sig").splitlines()
-    ]
-    return "\n".join(lines) + "\n"
 
 
 def mintegral_doc_path_from_menu(menu_text: str, doc_key: str, lang: str) -> str:
@@ -382,22 +374,16 @@ def decode_javascript_unicode_escapes(value: str) -> str:
 
 
 def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
-    static_text = static_mintegral_ads_txt()
-    if static_text is not None:
-        return static_text
-
-    try:
-        markdown_text = fetch_mintegral_markdown_doc(source)
-        return extract_mintegral_ads_txt(markdown_text)
-    except RuntimeError as markdown_error:
-        logging.warning("Could not extract Mintegral markdown doc directly: %s", markdown_error)
-
     try:
         return extract_mintegral_ads_txt(raw_text)
     except RuntimeError as first_error:
         scripts = linked_javascript_urls(source.url, raw_text)
         if not scripts:
-            raise first_error
+            try:
+                markdown_text = fetch_mintegral_markdown_doc(source)
+                return extract_mintegral_ads_txt(markdown_text)
+            except RuntimeError:
+                raise first_error
 
         logging.info("Mintegral block was not in the page HTML; checking linked script chunks.")
         script_texts: list[str] = []
@@ -424,7 +410,14 @@ def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
         if not script_texts:
             raise first_error
         combined_text = raw_text + "\n" + "\n".join(script_texts)
-        return extract_mintegral_ads_txt(combined_text)
+        try:
+            return extract_mintegral_ads_txt(combined_text)
+        except RuntimeError:
+            try:
+                markdown_text = fetch_mintegral_markdown_doc(source)
+                return extract_mintegral_ads_txt(markdown_text)
+            except RuntimeError:
+                raise first_error
 
 
 def extract_source_text(source: SourceAccess, raw_text: str) -> str:
