@@ -60,6 +60,8 @@ MONTHS = {
 SOURCE_ENV_PREFIXES = {
     "mintegral": "MINTEGRAL",
     "unity": "UNITY",
+    "liftoff": "VUNGLE",
+    "vungle": "VUNGLE",
 }
 
 MINTEGRAL_MARKER = "Please replace your PublisherID with your actual publisher id acquired from Mintegral dashboard."
@@ -75,6 +77,8 @@ MINTEGRAL_MARKER_PATTERN = re.compile(
     r"please\s+replace\s+your\s+publisherid\s+with\s+your\s+actual\s+publisher\s+id\s+acquired\s+from\s+mintegral\s+dashboard\.?",
     re.IGNORECASE,
 )
+VUNGLE_SOURCE_URL = "https://pub-ctrl-api.vungle.com/api/v1/adstxt/vungle"
+VUNGLE_FIRST_LINE = "vungle.com,669477b160e2ea00114a81e3,DIRECT,c107d686becd2d77"
 ADS_LINE_PATTERN = re.compile(
     r"([a-z0-9.-]+\.[a-z]{2,}\s*,\s*(?:your\s+PublisherID|[^,\s<]+)\s*,\s*(?:DIRECT|RESELLER)(?:\s*,\s*[^,\s<]+)?)",
     re.IGNORECASE,
@@ -210,8 +214,7 @@ def fetch_text(
     if extra_headers:
         headers.update(extra_headers)
     if use_basic_auth and login and password and "Authorization" not in headers:
-        token = base64.b64encode(f"{login}:{password}".encode("utf-8")).decode("ascii")
-        headers["Authorization"] = f"Basic {token}"
+        headers["Authorization"] = basic_authorization(login, password)
     request = Request(url, data=payload, headers=headers, method=method)
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8-sig")
@@ -225,6 +228,8 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         raise RuntimeError(f"Unknown source {source_name!r}. Known sources: {known}")
 
     url = os.getenv(f"{prefix}_SOURCE_URL")
+    if key in {"liftoff", "vungle"}:
+        url = url or VUNGLE_SOURCE_URL
     if not url:
         raise RuntimeError(f"Missing source secret: {prefix}_SOURCE_URL")
 
@@ -232,6 +237,12 @@ def source_access_from_env(source_name: str) -> SourceAccess:
     method = "GET"
     payload = None
     if key == "unity":
+        unity_name = os.getenv("UNITY_NAME")
+        unity_token = os.getenv("UNITY_TOKEN")
+        if unity_name and unity_token:
+            headers["Authorization"] = basic_authorization(unity_name, unity_token)
+        elif unity_token:
+            headers["Authorization"] = f"Bearer {unity_token}"
         headers.setdefault("Accept", "application/json, text/plain, */*")
         headers.setdefault("Content-Type", "application/json")
         headers.setdefault("Origin", "https://cloud.unity.com")
@@ -239,6 +250,8 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         method = "POST"
         publisher_web_url = os.getenv("UNITY_PUBLISHER_WEB_URL", "https://www.kidsgames.top/app-ads.txt")
         payload = json.dumps({"publisherWebUrl": publisher_web_url}).encode("utf-8")
+    elif key in {"liftoff", "vungle"}:
+        headers.setdefault("Accept", "text/plain, */*")
 
     return SourceAccess(
         name=key,
@@ -261,6 +274,11 @@ def source_headers_from_env(prefix: str) -> dict[str, str]:
     if cookie:
         headers["Cookie"] = cookie
     return headers
+
+
+def basic_authorization(login: str, password: str) -> str:
+    token = base64.b64encode(f"{login}:{password}".encode("utf-8")).decode("ascii")
+    return f"Basic {token}"
 
 
 def looks_like_ads_txt(text: str) -> bool:
@@ -490,6 +508,8 @@ def extract_source_text(source: SourceAccess, raw_text: str) -> str:
         return extract_mintegral_source_text(source, raw_text)
     if source.name == "unity":
         return extract_unity_source_text(raw_text)
+    if source.name in {"liftoff", "vungle"}:
+        return extract_vungle_source_text(raw_text)
     return raw_text
 
 
@@ -498,6 +518,36 @@ def normalize_ads_txt_lines(lines: Iterable[str]) -> str:
     if not output_lines:
         raise RuntimeError("No app-ads.txt lines were extracted.")
     return "\n".join(output_lines) + "\n"
+
+
+def extract_vungle_source_text(raw_text: str) -> str:
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        pass
+    else:
+        value = payload.get("value") if isinstance(payload, dict) else None
+        if not isinstance(value, str):
+            raise RuntimeError(f"Vungle JSON response does not contain app-ads.txt value: {payload}")
+        raw_text = value
+
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    if not lines:
+        raise RuntimeError("Vungle source is empty.")
+    invalid_lines = [
+        line
+        for line in lines[1:]
+        if not (
+            is_ads_txt_line(line)
+            or line.startswith("#")
+            or line.lower().startswith(("ownerdomain=", "managerdomain=", "inventorypartnerdomain="))
+        )
+    ]
+    if invalid_lines:
+        preview = " | ".join(line[:160] for line in invalid_lines[:3])
+        raise RuntimeError(f"Vungle source does not look like an app-ads.txt file. Unexpected lines: {preview}")
+    lines[0] = VUNGLE_FIRST_LINE
+    return "\n".join(lines) + "\n"
 
 
 def extract_ads_lines_from_json_value(value: object) -> list[str]:

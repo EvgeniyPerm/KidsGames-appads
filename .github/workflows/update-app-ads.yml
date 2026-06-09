@@ -90,10 +90,15 @@ jobs:
           UNITY_SOURCE_URL: ${{ secrets.UNITY_SOURCE_URL }}
           UNITY_LOGIN: ${{ secrets.UNITY_LOGIN }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_NAME: ${{ secrets.UNITY_NAME }}
+          UNITY_TOKEN: ${{ secrets.UNITY_TOKEN }}
           UNITY_AUTHORIZATION: ${{ secrets.UNITY_AUTHORIZATION }}
           UNITY_COOKIE: ${{ secrets.UNITY_COOKIE }}
           UNITY_PUBLISHER_WEB_URL: ${{ secrets.UNITY_PUBLISHER_WEB_URL || 'https://www.kidsgames.top/app-ads.txt' }}
-          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE) && 'mintegral,unity') || 'mintegral' }}
+          VUNGLE_SOURCE_URL: ${{ secrets.VUNGLE_SOURCE_URL }}
+          VUNGLE_AUTHORIZATION: ${{ secrets.VUNGLE_AUTHORIZATION }}
+          VUNGLE_COOKIE: ${{ secrets.VUNGLE_COOKIE }}
+          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE || secrets.UNITY_TOKEN) && 'mintegral,unity,vungle') || 'mintegral,vungle' }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}

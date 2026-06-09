@@ -79,6 +79,58 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(source.method, "POST")
         self.assertEqual(source.payload, b'{"publisherWebUrl": "https://www.kidsgames.top/app-ads.txt"}')
 
+    def test_source_access_from_env_reads_unity_name_token_as_basic_auth(self) -> None:
+        env = {
+            "UNITY_SOURCE_URL": "https://services.unity.com/api/monetize/app-ads/v1/organizations/1/developers/2/missing-app-ads",
+            "UNITY_NAME": "service-account-key",
+            "UNITY_TOKEN": "secret-key",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("unity")
+
+        self.assertEqual(source.headers["Authorization"], "Basic c2VydmljZS1hY2NvdW50LWtleTpzZWNyZXQta2V5")
+        self.assertFalse(source.use_basic_auth)
+
+    def test_source_access_from_env_reads_unity_token_as_bearer_without_name(self) -> None:
+        env = {
+            "UNITY_SOURCE_URL": "https://services.unity.com/api/monetize/app-ads/v1/organizations/1/developers/2/missing-app-ads",
+            "UNITY_TOKEN": "bearer-token",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("unity")
+
+        self.assertEqual(source.headers["Authorization"], "Bearer bearer-token")
+
+    def test_source_access_from_env_prefers_unity_name_token_over_authorization(self) -> None:
+        env = {
+            "UNITY_SOURCE_URL": "https://services.unity.com/api/monetize/app-ads/v1/organizations/1/developers/2/missing-app-ads",
+            "UNITY_AUTHORIZATION": "Bearer stale-dashboard-token",
+            "UNITY_NAME": "service-account-key",
+            "UNITY_TOKEN": "secret-key",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("unity")
+
+        self.assertEqual(source.headers["Authorization"], "Basic c2VydmljZS1hY2NvdW50LWtleTpzZWNyZXQta2V5")
+
+    def test_source_access_from_env_uses_default_vungle_url(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            source = updater.source_access_from_env("vungle")
+
+        self.assertEqual(source.name, "vungle")
+        self.assertEqual(source.url, "https://pub-ctrl-api.vungle.com/api/v1/adstxt/vungle")
+        self.assertEqual(source.headers["Accept"], "text/plain, */*")
+        self.assertTrue(source.use_basic_auth)
+        self.assertEqual(source.method, "GET")
+        self.assertIsNone(source.payload)
+
+    def test_source_access_from_env_accepts_liftoff_alias(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            source = updater.source_access_from_env("liftoff")
+
+        self.assertEqual(source.name, "liftoff")
+        self.assertEqual(source.url, "https://pub-ctrl-api.vungle.com/api/v1/adstxt/vungle")
+
     def test_source_access_from_env_rejects_unknown_source(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "Unknown source"):
             updater.source_access_from_env("unknown")
@@ -148,6 +200,44 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertIn("adagio.io, 1522, RESELLER\n", output)
         self.assertIn("adform.com, 3400, RESELLER, 9f5210a2f0999e32\n", output)
         self.assertIn("app-stock.com, 358747, RESELLER\n", output)
+
+    def test_extract_vungle_source_text_replaces_first_line(self) -> None:
+        text = """
+        vungle.com,old,DIRECT,c107d686becd2d77
+        google.com, pub-123, RESELLER, f08c47fec0942fa0
+        # comment from source
+        """
+
+        output = updater.extract_vungle_source_text(text)
+
+        self.assertTrue(output.startswith("vungle.com,669477b160e2ea00114a81e3,DIRECT,c107d686becd2d77\n"))
+        self.assertIn("google.com, pub-123, RESELLER, f08c47fec0942fa0\n", output)
+        self.assertIn("# comment from source\n", output)
+
+    def test_extract_vungle_source_text_reads_json_value(self) -> None:
+        text = """
+        {
+          "lastUpdated": "2026-06-03T01:21:53.65Z",
+          "value": "vungle.com,[yourVunglePublisherAccountID],DIRECT,c107d686becd2d77\\ngoogle.com, pub-123, RESELLER, f08c47fec0942fa0\\n"
+        }
+        """
+
+        output = updater.extract_vungle_source_text(text)
+
+        self.assertTrue(output.startswith("vungle.com,669477b160e2ea00114a81e3,DIRECT,c107d686becd2d77\n"))
+        self.assertIn("google.com, pub-123, RESELLER, f08c47fec0942fa0\n", output)
+
+    def test_extract_vungle_source_text_rejects_html_shell(self) -> None:
+        text = """
+        <!doctype html><html><body>
+        function gtag() {
+        dataLayer.push(arguments);
+        }
+        </body></html>
+        """
+
+        with self.assertRaisesRegex(RuntimeError, "does not look like an app-ads.txt file"):
+            updater.extract_vungle_source_text(text)
 
     def test_extract_mintegral_ads_txt_from_html_block(self) -> None:
         html = """
