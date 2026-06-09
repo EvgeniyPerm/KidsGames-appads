@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -588,13 +588,19 @@ def extract_unity_source_text(raw_text: str) -> str:
 
 def test_source_access(source_name: str) -> None:
     source = source_access_from_env(source_name)
-    if source.headers:
+    if source.name == "unity" and os.getenv("UNITY_NAME") and os.getenv("UNITY_TOKEN"):
+        auth_state = "with UNITY_NAME/UNITY_TOKEN basic auth"
+    elif source.name == "unity" and os.getenv("UNITY_TOKEN"):
+        auth_state = "with UNITY_TOKEN bearer auth"
+    elif source.headers:
         auth_state = "with custom headers"
     elif source.use_basic_auth and source.login and source.password:
         auth_state = "with login/password"
     else:
         auth_state = "without auth"
     logging.info("Testing %s source access %s.", source.name, auth_state)
+    parsed_url = urlparse(source.url)
+    logging.info("Testing %s endpoint %s%s.", source.name, parsed_url.netloc, parsed_url.path)
     raw_text = fetch_text(
         source.url,
         login=source.login,
