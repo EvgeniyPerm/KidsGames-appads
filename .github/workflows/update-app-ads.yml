@@ -129,6 +129,16 @@ jobs:
           YANDEX_TOKEN: ${{ secrets.YANDEX_TOKEN }}
           YANDEX_CODE: ${{ secrets.YANDEX_CODE }}
           YANDEX_REFRESH_TOKEN: ${{ secrets.YANDEX_REFRESH_TOKEN }}
+          YANDEX_ADD_SOURCE_URL: ${{ secrets.YANDEX_ADD_SOURCE_URL }}
+          YANDEX_ADD_URL: ${{ secrets.YANDEX_ADD_URL }}
+          YANDEX_ADD_CLIENT_ID: ${{ secrets.YANDEX_ADD_CLIENT_ID }}
+          YANDEX_ADD_CLIENT_SECRET: ${{ secrets.YANDEX_ADD_CLIENT_SECRET }}
+          YANDEX_ADD_AUTHORIZATION: ${{ secrets.YANDEX_ADD_AUTHORIZATION }}
+          YANDEX_ADD_COOKIE: ${{ secrets.YANDEX_ADD_COOKIE }}
+          YANDEX_ADD_ACCESS_TOKEN: ${{ secrets.YANDEX_ADD_ACCESS_TOKEN }}
+          YANDEX_ADD_TOKEN: ${{ secrets.YANDEX_ADD_TOKEN }}
+          YANDEX_ADD_CODE: ${{ secrets.YANDEX_ADD_CODE }}
+          YANDEX_ADD_REFRESH_TOKEN: ${{ secrets.YANDEX_ADD_REFRESH_TOKEN }}
           INMOBI_SOURCE_URL: ${{ secrets.INMOBI_SOURCE_URL }}
           INMOBI_LOGIN: ${{ secrets.INMOBI_LOGIN }}
           INMOBI_PASSWORD: ${{ secrets.INMOBI_PASSWORD }}

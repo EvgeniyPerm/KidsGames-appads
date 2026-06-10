@@ -67,6 +67,8 @@ SOURCE_ENV_PREFIXES = {
     "mintegral": "MINTEGRAL",
     "unity": "UNITY",
     "yandex": "YANDEX",
+    "yandex2": "YANDEX_ADD",
+    "yandex_add": "YANDEX_ADD",
     "liftoff": "VUNGLE",
     "vungle": "VUNGLE",
 }
@@ -259,8 +261,8 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         url = url or INMOBI_SOURCE_URL
     if key == "ironsource":
         url = url or IRONSOURCE_SOURCE_URL
-    if key == "yandex":
-        yandex_url = os.getenv("YANDEX_URL")
+    if key in {"yandex", "yandex2", "yandex_add"}:
+        yandex_url = os.getenv(f"{prefix}_URL")
         url = url or (None if is_yandex_oauth_url(yandex_url) else yandex_url) or YANDEX_SOURCE_URL
     if key in {"liftoff", "vungle"}:
         url = url or VUNGLE_SOURCE_URL
@@ -307,8 +309,8 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         headers.setdefault("Accept", "text/plain, */*")
     elif key == "inmobi":
         headers.setdefault("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7")
-    elif key == "yandex":
-        token = yandex_access_token_from_env()
+    elif key in {"yandex", "yandex2", "yandex_add"}:
+        token = yandex_access_token_from_env(prefix)
         if token and "Authorization" not in headers:
             headers["Authorization"] = token if token.lower().startswith(("oauth ", "bearer ")) else f"OAuth {token}"
         headers.setdefault("Accept", "application/json, text/plain, */*")
@@ -320,7 +322,7 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         login=os.getenv(f"{prefix}_LOGIN"),
         password=os.getenv(f"{prefix}_PASSWORD"),
         headers=headers,
-        use_basic_auth=key not in {"inmobi", "unity", "yandex"},
+        use_basic_auth=key not in {"inmobi", "unity", "yandex", "yandex2", "yandex_add"},
         method=method,
         payload=payload,
     )
@@ -349,12 +351,12 @@ def is_yandex_oauth_url(url: str | None) -> bool:
     return host.endswith("oauth.yandex.ru") or host.endswith("passport.yandex.ru")
 
 
-def yandex_access_token_from_env() -> str | None:
-    explicit_token = os.getenv("YANDEX_ACCESS_TOKEN") or os.getenv("YANDEX_TOKEN")
+def yandex_access_token_from_env(prefix: str = "YANDEX") -> str | None:
+    explicit_token = os.getenv(f"{prefix}_ACCESS_TOKEN") or os.getenv(f"{prefix}_TOKEN")
     if explicit_token:
         return explicit_token
 
-    yandex_url = os.getenv("YANDEX_URL")
+    yandex_url = os.getenv(f"{prefix}_URL")
     if yandex_url:
         parsed_url = urlparse(yandex_url)
         url_params = parse_qs(parsed_url.query)
@@ -363,10 +365,10 @@ def yandex_access_token_from_env() -> str | None:
         if token_values and token_values[0]:
             return token_values[0]
 
-    code = os.getenv("YANDEX_CODE") or yandex_oauth_code_from_url(yandex_url)
-    refresh_token = os.getenv("YANDEX_REFRESH_TOKEN")
+    code = os.getenv(f"{prefix}_CODE") or yandex_oauth_code_from_url(yandex_url)
+    refresh_token = os.getenv(f"{prefix}_REFRESH_TOKEN")
     if code or refresh_token:
-        return fetch_yandex_oauth_token(code=code, refresh_token=refresh_token)
+        return fetch_yandex_oauth_token(prefix, code=code, refresh_token=refresh_token)
 
     return None
 
@@ -379,11 +381,11 @@ def yandex_oauth_code_from_url(url: str | None) -> str | None:
     return code_values[0] if code_values else None
 
 
-def fetch_yandex_oauth_token(code: str | None = None, refresh_token: str | None = None) -> str:
-    client_id = os.getenv("YANDEX_CLIENT_ID")
-    client_secret = os.getenv("YANDEX_CLIENT_SECRET")
+def fetch_yandex_oauth_token(prefix: str = "YANDEX", code: str | None = None, refresh_token: str | None = None) -> str:
+    client_id = os.getenv(f"{prefix}_CLIENT_ID")
+    client_secret = os.getenv(f"{prefix}_CLIENT_SECRET")
     if not client_id or not client_secret:
-        raise RuntimeError("YANDEX_CLIENT_ID and YANDEX_CLIENT_SECRET are required to request a Yandex OAuth token.")
+        raise RuntimeError(f"{prefix}_CLIENT_ID and {prefix}_CLIENT_SECRET are required to request a Yandex OAuth token.")
 
     form: dict[str, str] = {
         "client_id": client_id,
@@ -653,7 +655,7 @@ def extract_source_text(source: SourceAccess, raw_text: str) -> str:
         return extract_mintegral_source_text(source, raw_text)
     if source.name == "unity":
         return extract_unity_source_text(raw_text)
-    if source.name == "yandex":
+    if source.name in {"yandex", "yandex2", "yandex_add"}:
         return extract_yandex_source_text(raw_text)
     if source.name in {"liftoff", "vungle"}:
         return extract_vungle_source_text(raw_text)

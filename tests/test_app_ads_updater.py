@@ -187,6 +187,18 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(source.url, "https://partner.yandex.ru/restapi/v1/api/files/sellers/app-ads.txt")
         self.assertEqual(source.headers["Authorization"], "OAuth fragment-token")
 
+    def test_source_access_from_env_reads_second_yandex_cookie(self) -> None:
+        env = {
+            "YANDEX_ADD_COOKIE": "Session_id=second",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("yandex_add")
+
+        self.assertEqual(source.name, "yandex_add")
+        self.assertEqual(source.url, "https://partner.yandex.ru/restapi/v1/api/files/sellers/app-ads.txt")
+        self.assertEqual(source.headers["Cookie"], "Session_id=second")
+        self.assertFalse(source.use_basic_auth)
+
     def test_source_access_from_env_uses_default_dtexchange_url(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             source = updater.source_access_from_env("dtexchange")
