@@ -113,7 +113,7 @@ class AppAdsUpdaterTest(unittest.TestCase):
             source = updater.source_access_from_env("yandex")
 
         self.assertEqual(source.name, "yandex")
-        self.assertEqual(source.url, "https://partner.yandex.ru/v2/settings/general/")
+        self.assertEqual(source.url, "https://partner.yandex.ru/restapi/v1/api/files/sellers/app-ads.txt")
         self.assertEqual(source.headers["Authorization"], "OAuth access-token")
         self.assertEqual(source.headers["Accept"], "application/json, text/plain, */*")
         self.assertFalse(source.use_basic_auth)
@@ -127,7 +127,7 @@ class AppAdsUpdaterTest(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             source = updater.source_access_from_env("yandex")
 
-        self.assertEqual(source.url, "https://partner.yandex.ru/v2/settings/general/")
+        self.assertEqual(source.url, "https://partner.yandex.ru/restapi/v1/api/files/sellers/app-ads.txt")
         self.assertEqual(source.headers["Authorization"], "OAuth fragment-token")
 
     def test_source_access_from_env_uses_default_dtexchange_url(self) -> None:

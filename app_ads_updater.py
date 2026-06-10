@@ -98,7 +98,7 @@ IRONSOURCE_SOURCE_URL = "https://docs.unity.com/en-us/grow/is-ads/user-acquisiti
 IRONSOURCE_FIRST_LINE = "ironsrc.com, 338629, Direct"
 IRONSOURCE_OWNER_DOMAIN_LINE = "OwnerDomain=kidsgames.top"
 IRONSOURCE_MARKER_PATTERN = re.compile(r"ironsource\s+authorized\s+resellers", re.IGNORECASE)
-YANDEX_SOURCE_URL = "https://partner.yandex.ru/v2/settings/general/"
+YANDEX_SOURCE_URL = "https://partner.yandex.ru/restapi/v1/api/files/sellers/app-ads.txt"
 ADS_LINE_PATTERN = re.compile(
     r"([a-z0-9.-]+\.[a-z]{2,}\s*,\s*(?:your\s+PublisherID|[^,\s<]+)\s*,\s*(?:DIRECT|RESELLER)(?:\s*,\s*[^,\s<]+)?)",
     re.IGNORECASE,
