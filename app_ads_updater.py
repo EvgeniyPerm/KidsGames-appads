@@ -23,24 +23,20 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 SOURCE_URL = "https://raw.githubusercontent.com/cleveradssolutions/App-ads.txt/master/app-ads.txt"
 DEFAULT_TIMEZONE = "Africa/Johannesburg"
-DEFAULT_FTP_REMOTE_DIR = "tairgames.top"
+DEFAULT_FTP_REMOTE_DIR = "kidsgames.top"
 LOG_PATH = Path("logs/app-ads-updater.log")
 SOURCE_CACHE_DIR = Path("source-cache")
 WIX_ADS_TXT_URL = "https://www.wixapis.com/promote-seo-robots-server/v2/ads"
 WIX_QUERY_SITES_URL = "https://www.wixapis.com/site-list/v2/sites/query"
 TELEGRAM_SUCCESS_MESSAGE = (
-    "✅ Обновил ads файлы (с частью AZON)\n"
-    "azon.games/app-ads.txt\n"
-    "azon.games/ads.txt\n"
-    "tairgames.top/app-ads.txt\n"
-    "tairgames.top/ads.txt"
+    "✅ Обновил ads файлы KidsGames\n"
+    "kidsgames.top/app-ads.txt\n"
+    "kidsgames.top/ads.txt"
 )
 
 VERIFY_URLS = (
-    "https://www.AZON.games/ads.txt",
-    "https://www.AZON.games/app-ads.txt",
-    "https://www.tairgames.top/ads.txt",
-    "https://www.tairgames.top/app-ads.txt",
+    "https://www.kidsgames.top/ads.txt",
+    "https://www.kidsgames.top/app-ads.txt",
 )
 
 MONTHS = {
@@ -114,8 +110,8 @@ ADS_LINE_PATTERN = re.compile(
 )
 
 
-AZON_LINES = (
-    "# AZON Last updated {date_text}",
+KIDSGAMES_LINES = (
+    "# KidsGames Last updated {date_text}",
     "google.com, pub-2206193735487862, DIRECT, f08c47fec0942fa0",
     "facebook.com, 982473989127847, DIRECT, c3e20eee3f780d68",
     "applovin.com, 3924b154e4c887949b692faf5649901d, DIRECT",
@@ -239,7 +235,7 @@ def fetch_text(
     method: str = "GET",
     payload: bytes | None = None,
 ) -> str:
-    headers = {"User-Agent": "AZON-app-ads-updater/1.0"}
+    headers = {"User-Agent": "KidsGames-app-ads-updater/1.0"}
     if extra_headers:
         headers.update(extra_headers)
     if use_basic_auth and login and password and "Authorization" not in headers:
@@ -300,7 +296,9 @@ def source_access_from_env(source_name: str) -> SourceAccess:
     elif key == "unity":
         unity_name = os.getenv("UNITY_NAME")
         unity_token = os.getenv("UNITY_TOKEN")
-        if unity_name and unity_token:
+        if "Authorization" in headers:
+            pass
+        elif unity_name and unity_token:
             headers["Authorization"] = basic_authorization(unity_name, unity_token)
         elif unity_token:
             headers["Authorization"] = f"Bearer {unity_token}"
@@ -412,7 +410,7 @@ def fetch_yandex_oauth_token(prefix: str = "YANDEX", code: str | None = None, re
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json",
-            "User-Agent": "AZON-app-ads-updater/1.0",
+            "User-Agent": "KidsGames-app-ads-updater/1.0",
         },
         method="POST",
     )
@@ -902,7 +900,9 @@ def test_source_access(source_name: str) -> None:
         header.lower() in {"authorization", "cookie", "x-auth-token", "bigo-ads-uid"}
         for header in source.headers
     )
-    if source.name == "unity" and os.getenv("UNITY_NAME") and os.getenv("UNITY_TOKEN"):
+    if source.name == "unity" and "Authorization" in source.headers and os.getenv("UNITY_AUTHORIZATION"):
+        auth_state = "with UNITY_AUTHORIZATION"
+    elif source.name == "unity" and os.getenv("UNITY_NAME") and os.getenv("UNITY_TOKEN"):
         auth_state = "with UNITY_NAME/UNITY_TOKEN basic auth"
     elif source.name == "unity" and os.getenv("UNITY_TOKEN"):
         auth_state = "with UNITY_TOKEN bearer auth"
@@ -1001,8 +1001,8 @@ def build_output(source_text: str, today: date, extra_source_texts: Iterable[tup
     if len(source_lines) < 2:
         raise ValueError("Source app-ads.txt has fewer than two lines.")
 
-    source_lines[1] = "OwnerDomain=AZON.games"
-    azon_text = "\n".join(line.format(date_text=month_day_year(today)) for line in AZON_LINES)
+    source_lines[1] = "OwnerDomain=kidsgames.top"
+    kidsgames_text = "\n".join(line.format(date_text=month_day_year(today)) for line in KIDSGAMES_LINES)
     source_part = "\n".join(source_lines)
     extra_parts: list[str] = []
     for name, text in extra_source_texts:
@@ -1011,8 +1011,8 @@ def build_output(source_text: str, today: date, extra_source_texts: Iterable[tup
             extra_parts.append(f"# {name} app-ads.txt\n{cleaned}")
     extra_text = "\n\n".join(extra_parts)
     if extra_text:
-        return f"{azon_text}\n{source_part}\n\n{extra_text}\n"
-    return f"{azon_text}\n{source_part}\n"
+        return f"{kidsgames_text}\n{source_part}\n\n{extra_text}\n"
+    return f"{kidsgames_text}\n{source_part}\n"
 
 
 def source_cache_path(source_name: str) -> Path:
@@ -1157,7 +1157,7 @@ def wix_headers(settings: Settings, id_header: str, id_value: str) -> dict[str, 
         id_header: id_value,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "AZON-app-ads-updater/1.0",
+        "User-Agent": "KidsGames-app-ads-updater/1.0",
     }
 
 
@@ -1178,7 +1178,7 @@ def wix_account_headers(settings: Settings) -> dict[str, str]:
         "wix-account-id": settings.wix_account_id or "",
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "AZON-app-ads-updater/1.0",
+        "User-Agent": "KidsGames-app-ads-updater/1.0",
     }
 
 
@@ -1332,7 +1332,7 @@ def url_quote(value: str) -> str:
 def run(settings: Settings, dry_run: bool = False, today_override: date | None = None) -> int:
     local_timezone = get_timezone(settings.timezone)
     today = today_override or datetime.now(local_timezone).date()
-    logging.info("Starting AZON app-ads update check for %s", today.isoformat())
+    logging.info("Starting KidsGames app-ads update check for %s", today.isoformat())
     if today_override:
         logging.warning("Test date override is enabled: %s", today.isoformat())
 
@@ -1348,7 +1348,7 @@ def run(settings: Settings, dry_run: bool = False, today_override: date | None =
     extra_source_texts = fetch_extra_source_texts(settings.extra_source_names)
     output_text = build_output(source_text, today, extra_source_texts)
     output_bytes = output_text.encode("utf-8")
-    dated_filename = f"{today.isoformat()} AZON app-ads.txt"
+    dated_filename = f"{today.isoformat()} KidsGames app-ads.txt"
     files = {
         "app-ads.txt": output_bytes,
         "ads.txt": output_bytes,
@@ -1364,14 +1364,14 @@ def run(settings: Settings, dry_run: bool = False, today_override: date | None =
     update_wix_ads_txt(settings, output_text)
     verify_urls(settings.verify_urls, output_text)
     updated_at = datetime.now(local_timezone).strftime("%Y-%m-%d %H:%M")
-    logging.info("%s updated www.azon.games\\app-ads.txt (wix,tairgames.top)", updated_at)
+    logging.info("%s updated www.kidsgames.top\\app-ads.txt", updated_at)
     send_telegram(settings, TELEGRAM_SUCCESS_MESSAGE)
     logging.info("Update completed successfully.")
     return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Update AZON app-ads.txt files.")
+    parser = argparse.ArgumentParser(description="Update KidsGames app-ads.txt files.")
     parser.add_argument("--dry-run", action="store_true", help="Build and check source without uploading.")
     parser.add_argument("--today", help="Override today's date for tests, format YYYY-MM-DD.")
     parser.add_argument("--test-telegram", action="store_true", help="Send only the Telegram test message.")

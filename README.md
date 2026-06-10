@@ -1,61 +1,28 @@
-# Update app-ads.txt (AZON)
+# KidsGames app-ads.txt updater
 
-Автоматическое ежедневное обновление `app-ads.txt` и `ads.txt` для AZON.
+Автоматическое ежедневное обновление `app-ads.txt` и `ads.txt` для KidsGames.
 
 ## Как работает
 
-Сервис запускается каждый день в 18:00 по `Africa/Johannesburg` через GitHub Actions.
+Сервис запускается каждый день через GitHub Actions.
 
-1. Скачивает исходный файл:
+1. Скачивает основной исходный файл:
    `https://raw.githubusercontent.com/cleveradssolutions/App-ads.txt/master/app-ads.txt`
 2. Проверяет дату в первой строке.
 3. Если дата не сегодняшняя и не завтрашняя, пишет `YYYY-MM-DD HH:MM checked` в лог и завершает работу.
 4. Если дата свежая, собирает новый файл:
-   - добавляет блок AZON с текущей датой;
-   - добавляет исходный файл;
-   - вторую строку исходного файла заменяет на `OwnerDomain=AZON.games`.
-5. Загружает на FTP три одинаковые копии:
+   - добавляет блок KidsGames с текущей датой;
+   - добавляет основной исходный файл;
+   - вторую строку исходного файла заменяет на `OwnerDomain=kidsgames.top`;
+   - добавляет включенные дополнительные источники из `EXTRA_SOURCES`.
+5. Загружает на FTP:
    - `app-ads.txt`
    - `ads.txt`
-   - `YYYY-MM-DD AZON app-ads.txt`
+   - `YYYY-MM-DD KidsGames app-ads.txt`
 6. Проверяет:
-   - `https://www.AZON.games/ads.txt`
-   - `https://www.AZON.games/app-ads.txt`
-   - `https://www.tairgames.top/ads.txt`
-   - `https://www.tairgames.top/app-ads.txt`
+   - `https://www.kidsgames.top/ads.txt`
+   - `https://www.kidsgames.top/app-ads.txt`
 7. Отправляет сообщение в Telegram.
-
-## Логи
-
-Лог пишется в `logs/app-ads-updater.log`.
-
-В GitHub Actions этот файл сохраняется как artifact `app-ads-updater-log`. Кроме того, все важные сообщения видны прямо в логе запуска workflow.
-
-Если обновления нет, строка в логе выглядит так:
-
-```text
-2026-05-20 21:19 checked
-```
-
-## GitHub Secrets
-
-В приватном репозитории нужно открыть:
-
-`Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`
-
-Добавить:
-
-```text
-FTP_HOST=tairgames.top
-FTP_PORT=21
-FTP_USER=...
-FTP_PASSWORD=...
-FTP_REMOTE_DIR=tairgames.top
-TELEGRAM_BOT_TOKEN=...
-TELEGRAM_CHAT_ID=...
-```
-
-`TELEGRAM_CHAT_ID` нельзя надежно заменить username `@EvgeniyPerm`: боту нужно получить числовой chat id после того, как вы один раз напишете ему `/start`.
 
 ## Локальный запуск
 
@@ -65,22 +32,10 @@ TELEGRAM_CHAT_ID=...
 python app_ads_updater.py --dry-run
 ```
 
-Проверить сборку так, будто сегодня конкретная дата:
+Проверить конкретный источник:
 
 ```powershell
-python app_ads_updater.py --dry-run --today 2026-05-13
-```
-
-Проверить только Telegram:
-
-```powershell
-python app_ads_updater.py --test-telegram
-```
-
-Проверить только Wix API без обновления сайта:
-
-```powershell
-python app_ads_updater.py --test-wix
+python app_ads_updater.py --test-source unity
 ```
 
 Запустить тесты:
@@ -89,20 +44,33 @@ python app_ads_updater.py --test-wix
 python -m unittest discover -s tests
 ```
 
-## Создание приватного репозитория
+## GitHub Secrets
 
-Имя репозитория на GitHub лучше сделать без пробелов и спецсимволов:
+Минимально нужны:
 
 ```text
-Update-app-ads-txt-AZON
+FTP_HOST=kidsgames.top
+FTP_PORT=21
+FTP_USER=...
+FTP_PASSWORD=...
+FTP_REMOTE_DIR=kidsgames.top
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
 ```
 
-Отображаемое название в README уже оставлено как `Update app-ads.txt (AZON)`.
+Дополнительные источники включаются через `EXTRA_SOURCES`, например:
 
-Если установить GitHub CLI и авторизоваться, репозиторий можно создать командой:
-
-```powershell
-gh repo create EvgeniyPerm/Update-app-ads-txt-AZON --private --source . --remote origin --push
+```text
+EXTRA_SOURCES=mintegral,unity,vungle,ironsource,dtexchange,yandex
 ```
 
-Без GitHub CLI нужно один раз вручную создать private repository в браузере и выполнить команды из блока, который GitHub покажет для existing repository.
+Для Unity используются:
+
+```text
+UNITY_SOURCE_URL=...
+UNITY_NAME=...
+UNITY_TOKEN=...
+UNITY_AUTHORIZATION=...
+UNITY_COOKIE=...
+UNITY_PUBLISHER_WEB_URL=https://www.kidsgames.top/app-ads.txt
+```

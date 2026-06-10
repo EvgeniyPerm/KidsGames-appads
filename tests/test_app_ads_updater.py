@@ -24,8 +24,8 @@ class AppAdsUpdaterTest(unittest.TestCase):
         source = "# Updated May 13, 2026\nOwnerDomain=Old.example\nnetwork.com, id, DIRECT\n"
         output = updater.build_output(source, date(2026, 5, 13))
 
-        self.assertTrue(output.startswith("# AZON Last updated May 13, 2026\n"))
-        self.assertIn("OwnerDomain=AZON.games\nnetwork.com, id, DIRECT", output)
+        self.assertTrue(output.startswith("# KidsGames Last updated May 13, 2026\n"))
+        self.assertIn("OwnerDomain=kidsgames.top\nnetwork.com, id, DIRECT", output)
         self.assertNotIn("OwnerDomain=Old.example", output)
         self.assertNotIn("adcolony.com", output)
         self.assertNotIn("Verve.com", output)
@@ -293,17 +293,17 @@ class AppAdsUpdaterTest(unittest.TestCase):
 
         self.assertEqual(source.headers["Authorization"], "Bearer bearer-token")
 
-    def test_source_access_from_env_prefers_unity_name_token_over_authorization(self) -> None:
+    def test_source_access_from_env_prefers_unity_authorization_over_name_token(self) -> None:
         env = {
             "UNITY_SOURCE_URL": "https://services.unity.com/api/monetize/app-ads/v1/organizations/1/developers/2/missing-app-ads",
-            "UNITY_AUTHORIZATION": "Bearer stale-dashboard-token",
+            "UNITY_AUTHORIZATION": "Bearer dashboard-token",
             "UNITY_NAME": "service-account-key",
             "UNITY_TOKEN": "secret-key",
         }
         with patch.dict(os.environ, env, clear=True):
             source = updater.source_access_from_env("unity")
 
-        self.assertEqual(source.headers["Authorization"], "Basic c2VydmljZS1hY2NvdW50LWtleTpzZWNyZXQta2V5")
+        self.assertEqual(source.headers["Authorization"], "Bearer dashboard-token")
 
     def test_source_access_from_env_uses_default_vungle_url(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
