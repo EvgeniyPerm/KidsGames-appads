@@ -67,7 +67,7 @@ SOURCE_ENV_PREFIXES = {
     "mintegral": "MINTEGRAL",
     "unity": "UNITY",
     "yandex": "YANDEX",
-    "yandex2": "YANDEX_ADD",
+    "yandex2": "YANDEX2",
     "yandex_add": "YANDEX_ADD",
     "liftoff": "VUNGLE",
     "vungle": "VUNGLE",
@@ -102,6 +102,12 @@ IRONSOURCE_FIRST_LINE = "ironsrc.com, 338629, Direct"
 IRONSOURCE_OWNER_DOMAIN_LINE = "OwnerDomain=kidsgames.top"
 IRONSOURCE_MARKER_PATTERN = re.compile(r"ironsource\s+authorized\s+resellers", re.IGNORECASE)
 YANDEX_SOURCE_URL = "https://partner.yandex.ru/restapi/v1/api/files/sellers/app-ads.txt"
+YANDEX2_FIRST_LINES = (
+    "yango-ads.com, 104716934, DIRECT",
+    "yango-ads.com, 97637571, DIRECT",
+    "yango-ads.com, 1079241, DIRECT",
+    "yango-ads.com, 305746111, DIRECT",
+)
 ADS_LINE_PATTERN = re.compile(
     r"([a-z0-9.-]+\.[a-z]{2,}\s*,\s*(?:your\s+PublisherID|[^,\s<]+)\s*,\s*(?:DIRECT|RESELLER)(?:\s*,\s*[^,\s<]+)?)",
     re.IGNORECASE,
@@ -655,7 +661,9 @@ def extract_source_text(source: SourceAccess, raw_text: str) -> str:
         return extract_mintegral_source_text(source, raw_text)
     if source.name == "unity":
         return extract_unity_source_text(raw_text)
-    if source.name in {"yandex", "yandex2", "yandex_add"}:
+    if source.name == "yandex2":
+        return extract_yandex_source_text(raw_text, first_lines=YANDEX2_FIRST_LINES)
+    if source.name in {"yandex", "yandex_add"}:
         return extract_yandex_source_text(raw_text)
     if source.name in {"liftoff", "vungle"}:
         return extract_vungle_source_text(raw_text)
@@ -861,10 +869,10 @@ def extract_unity_source_text(raw_text: str) -> str:
     return normalize_ads_txt_lines(lines)
 
 
-def extract_yandex_source_text(raw_text: str) -> str:
+def extract_yandex_source_text(raw_text: str, first_lines: Iterable[str] = ()) -> str:
     if looks_like_ads_txt(raw_text):
         lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-        return "\n".join(lines) + "\n"
+        return "\n".join([*first_lines, *lines]) + "\n"
 
     try:
         payload = json.loads(raw_text)
@@ -873,7 +881,7 @@ def extract_yandex_source_text(raw_text: str) -> str:
     if payload is not None:
         lines = extract_ads_lines_from_json_value(payload)
         if lines:
-            return "\n".join(line.strip() for line in lines if line.strip()) + "\n"
+            return "\n".join([*first_lines, *(line.strip() for line in lines if line.strip())]) + "\n"
 
     text = html_to_text(raw_text) if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")) else raw_text
     lower_text = text.lower()
@@ -885,7 +893,7 @@ def extract_yandex_source_text(raw_text: str) -> str:
         preview_lines = [line.strip() for line in text.splitlines() if line.strip()][:10]
         preview = " | ".join(line[:160] for line in preview_lines)
         raise RuntimeError(f"Yandex source does not contain app-ads.txt lines. Text preview: {preview}")
-    return "\n".join(lines) + "\n"
+    return "\n".join([*first_lines, *lines]) + "\n"
 
 
 def test_source_access(source_name: str) -> None:

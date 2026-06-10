@@ -199,6 +199,18 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(source.headers["Cookie"], "Session_id=second")
         self.assertFalse(source.use_basic_auth)
 
+    def test_source_access_from_env_reads_yandex2_cookie(self) -> None:
+        env = {
+            "YANDEX2_COOKIE": "Session_id=second",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("yandex2")
+
+        self.assertEqual(source.name, "yandex2")
+        self.assertEqual(source.url, "https://partner.yandex.ru/restapi/v1/api/files/sellers/app-ads.txt")
+        self.assertEqual(source.headers["Cookie"], "Session_id=second")
+        self.assertFalse(source.use_basic_auth)
+
     def test_source_access_from_env_uses_default_dtexchange_url(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             source = updater.source_access_from_env("dtexchange")
@@ -470,6 +482,29 @@ class AppAdsUpdaterTest(unittest.TestCase):
             output,
             "yandex.ru, 12345, DIRECT\n"
             "google.com, pub-1, RESELLER, f08c47fec0942fa0\n",
+        )
+
+    def test_extract_source_text_prepends_yandex2_direct_lines(self) -> None:
+        source = updater.SourceAccess(
+            name="yandex2",
+            url="https://partner.yandex.ru/restapi/v1/api/files/sellers/app-ads.txt",
+            login=None,
+            password=None,
+            headers={},
+            use_basic_auth=False,
+            method="GET",
+            payload=None,
+        )
+
+        output = updater.extract_source_text(source, "yandex.ru, 12345, DIRECT\n")
+
+        self.assertEqual(
+            output,
+            "yango-ads.com, 104716934, DIRECT\n"
+            "yango-ads.com, 97637571, DIRECT\n"
+            "yango-ads.com, 1079241, DIRECT\n"
+            "yango-ads.com, 305746111, DIRECT\n"
+            "yandex.ru, 12345, DIRECT\n",
         )
 
     def test_extract_dtexchange_source_text_replaces_publisher_id_and_skips_header(self) -> None:
