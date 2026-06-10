@@ -108,6 +108,18 @@ jobs:
           BIGO_PAYLOAD: ${{ secrets.BIGO_PAYLOAD || '{}' }}
           BIGO_LOGIN: ${{ secrets.BIGO_LOGIN }}
           BIGO_PASSWORD: ${{ secrets.BIGO_PASSWORD }}
+          BIDMACHINE_SOURCE_URL: ${{ secrets.BIDMACHINE_SOURCE_URL }}
+          BIDMACHINE_TOKEN: ${{ secrets.BIDMACHINE_TOKEN }}
+          BIDMACHINE_TOKEN_HEADER: ${{ secrets.BIDMACHINE_TOKEN_HEADER || 'X-Auth-Token' }}
+          YANDEX_SOURCE_URL: ${{ secrets.YANDEX_SOURCE_URL }}
+          YANDEX_URL: ${{ secrets.YANDEX_URL }}
+          YANDEX_CLIENT_ID: ${{ secrets.YANDEX_CLIENT_ID }}
+          YANDEX_CLIENT_SECRET: ${{ secrets.YANDEX_CLIENT_SECRET }}
+          YANDEX_AUTHORIZATION: ${{ secrets.YANDEX_AUTHORIZATION }}
+          YANDEX_ACCESS_TOKEN: ${{ secrets.YANDEX_ACCESS_TOKEN }}
+          YANDEX_TOKEN: ${{ secrets.YANDEX_TOKEN }}
+          YANDEX_CODE: ${{ secrets.YANDEX_CODE }}
+          YANDEX_REFRESH_TOKEN: ${{ secrets.YANDEX_REFRESH_TOKEN }}
           INMOBI_SOURCE_URL: ${{ secrets.INMOBI_SOURCE_URL }}
           INMOBI_LOGIN: ${{ secrets.INMOBI_LOGIN }}
           INMOBI_PASSWORD: ${{ secrets.INMOBI_PASSWORD }}

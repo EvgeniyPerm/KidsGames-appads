@@ -91,6 +91,45 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(source.headers["x-second-token"], "token-two")
         self.assertEqual(source.payload, b'{"pageNo":1}')
 
+    def test_source_access_from_env_uses_default_bidmachine_url_and_token(self) -> None:
+        env = {
+            "BIDMACHINE_TOKEN": "access-token",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("bidmachine")
+
+        self.assertEqual(source.name, "bidmachine")
+        self.assertEqual(source.url, "https://dashboard.bidmachine.io/app-ads/file/sellerId=789")
+        self.assertEqual(source.headers["X-Auth-Token"], "access-token")
+        self.assertEqual(source.headers["Accept"], "text/plain, */*")
+        self.assertEqual(source.method, "GET")
+        self.assertIsNone(source.payload)
+
+    def test_source_access_from_env_uses_default_yandex_url_and_token(self) -> None:
+        env = {
+            "YANDEX_TOKEN": "access-token",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("yandex")
+
+        self.assertEqual(source.name, "yandex")
+        self.assertEqual(source.url, "https://partner.yandex.ru/v2/settings/general/")
+        self.assertEqual(source.headers["Authorization"], "OAuth access-token")
+        self.assertEqual(source.headers["Accept"], "application/json, text/plain, */*")
+        self.assertFalse(source.use_basic_auth)
+        self.assertEqual(source.method, "GET")
+        self.assertIsNone(source.payload)
+
+    def test_source_access_from_env_reads_yandex_access_token_from_url_fragment(self) -> None:
+        env = {
+            "YANDEX_URL": "https://oauth.yandex.ru/verification_code#access_token=fragment-token&token_type=bearer",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("yandex")
+
+        self.assertEqual(source.url, "https://partner.yandex.ru/v2/settings/general/")
+        self.assertEqual(source.headers["Authorization"], "OAuth fragment-token")
+
     def test_source_access_from_env_uses_default_dtexchange_url(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             source = updater.source_access_from_env("dtexchange")
@@ -306,6 +345,63 @@ class AppAdsUpdaterTest(unittest.TestCase):
         output = updater.extract_bigo_source_text(text)
 
         self.assertEqual(output.count("pubmatic.com, 163754, RESELLER, 5d62403b186f2ace\n"), 2)
+
+    def test_extract_bidmachine_source_text_preserves_source_lines(self) -> None:
+        text = """
+        bidmachine.io, 789, DIRECT
+        bidmachine.io, 789, DIRECT
+        pubmatic.com, 163754, RESELLER, 5d62403b186f2ace
+        """
+
+        output = updater.extract_bidmachine_source_text(text)
+
+        self.assertTrue(output.startswith("bidmachine.io, 789, DIRECT\n"))
+        self.assertEqual(output.count("bidmachine.io, 789, DIRECT\n"), 2)
+        self.assertIn("pubmatic.com, 163754, RESELLER, 5d62403b186f2ace\n", output)
+
+    def test_extract_bidmachine_source_text_reports_dashboard_shell(self) -> None:
+        text = "<!doctype html><html><title>BidMachine</title><div id=\"application\">Loading...</div></html>"
+
+        with self.assertRaisesRegex(RuntimeError, "dashboard HTML shell"):
+            updater.extract_bidmachine_source_text(text)
+
+    def test_extract_yandex_source_text_preserves_source_lines_from_json(self) -> None:
+        text = """
+        {
+          "data": {
+            "items": [
+              "yandex.ru, 12345, DIRECT",
+              "rubiconproject.com, 16356, RESELLER, 0bfd66d529a55807",
+              "rubiconproject.com, 16356, RESELLER, 0bfd66d529a55807"
+            ]
+          }
+        }
+        """
+
+        output = updater.extract_yandex_source_text(text)
+
+        self.assertEqual(
+            output,
+            "yandex.ru, 12345, DIRECT\n"
+            "rubiconproject.com, 16356, RESELLER, 0bfd66d529a55807\n"
+            "rubiconproject.com, 16356, RESELLER, 0bfd66d529a55807\n",
+        )
+
+    def test_extract_yandex_source_text_reads_ads_lines_from_html(self) -> None:
+        text = """
+        <html><body>
+          <div>yandex.ru, 12345, DIRECT</div>
+          <div>google.com, pub-1, RESELLER, f08c47fec0942fa0</div>
+        </body></html>
+        """
+
+        output = updater.extract_yandex_source_text(text)
+
+        self.assertEqual(
+            output,
+            "yandex.ru, 12345, DIRECT\n"
+            "google.com, pub-1, RESELLER, f08c47fec0942fa0\n",
+        )
 
     def test_extract_dtexchange_source_text_replaces_publisher_id_and_skips_header(self) -> None:
         text = """

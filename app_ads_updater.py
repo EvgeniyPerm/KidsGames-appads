@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -59,11 +59,13 @@ MONTHS = {
 
 SOURCE_ENV_PREFIXES = {
     "bigo": "BIGO",
+    "bidmachine": "BIDMACHINE",
     "dtexchange": "DTEXCHANGE",
     "inmobi": "INMOBI",
     "ironsource": "IRONSOURCE",
     "mintegral": "MINTEGRAL",
     "unity": "UNITY",
+    "yandex": "YANDEX",
     "liftoff": "VUNGLE",
     "vungle": "VUNGLE",
 }
@@ -84,6 +86,7 @@ MINTEGRAL_MARKER_PATTERN = re.compile(
 VUNGLE_SOURCE_URL = "https://pub-ctrl-api.vungle.com/api/v1/adstxt/vungle"
 VUNGLE_FIRST_LINE = "vungle.com,669477b160e2ea00114a81e3,DIRECT,c107d686becd2d77"
 BIGO_SOURCE_URL = "https://www.bigossp.com/union/app-ads-txt/developer/list"
+BIDMACHINE_SOURCE_URL = "https://dashboard.bidmachine.io/app-ads/file/sellerId=789"
 DTEXCHANGE_SOURCE_URL = "https://www.digitalturbine.com/dt-app-ads.txt"
 DTEXCHANGE_FIRST_LINE = "fyber.com,230573,DIRECT,1ad675c9de6b5176"
 INMOBI_SOURCE_URL = "https://publisher.inmobi.com/ads-txt/app-ads"
@@ -95,6 +98,7 @@ IRONSOURCE_SOURCE_URL = "https://docs.unity.com/en-us/grow/is-ads/user-acquisiti
 IRONSOURCE_FIRST_LINE = "ironsrc.com, 338629, Direct"
 IRONSOURCE_OWNER_DOMAIN_LINE = "OwnerDomain=kidsgames.top"
 IRONSOURCE_MARKER_PATTERN = re.compile(r"ironsource\s+authorized\s+resellers", re.IGNORECASE)
+YANDEX_SOURCE_URL = "https://partner.yandex.ru/v2/settings/general/"
 ADS_LINE_PATTERN = re.compile(
     r"([a-z0-9.-]+\.[a-z]{2,}\s*,\s*(?:your\s+PublisherID|[^,\s<]+)\s*,\s*(?:DIRECT|RESELLER)(?:\s*,\s*[^,\s<]+)?)",
     re.IGNORECASE,
@@ -246,12 +250,17 @@ def source_access_from_env(source_name: str) -> SourceAccess:
     url = os.getenv(f"{prefix}_SOURCE_URL")
     if key == "bigo":
         url = url or BIGO_SOURCE_URL
+    if key == "bidmachine":
+        url = url or BIDMACHINE_SOURCE_URL
     if key == "dtexchange":
         url = url or DTEXCHANGE_SOURCE_URL
     if key == "inmobi":
         url = url or INMOBI_SOURCE_URL
     if key == "ironsource":
         url = url or IRONSOURCE_SOURCE_URL
+    if key == "yandex":
+        yandex_url = os.getenv("YANDEX_URL")
+        url = url or (None if is_yandex_oauth_url(yandex_url) else yandex_url) or YANDEX_SOURCE_URL
     if key in {"liftoff", "vungle"}:
         url = url or VUNGLE_SOURCE_URL
     if not url:
@@ -273,6 +282,12 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         headers.setdefault("Referer", "https://www.bigossp.com/media/appAdsTxt/developer")
         method = "POST"
         payload = (os.getenv("BIGO_PAYLOAD") or "{}").encode("utf-8")
+    elif key == "bidmachine":
+        bidmachine_token = os.getenv("BIDMACHINE_TOKEN")
+        if bidmachine_token:
+            headers[os.getenv("BIDMACHINE_TOKEN_HEADER", "X-Auth-Token")] = bidmachine_token
+        headers.setdefault("Accept", "text/plain, */*")
+        headers.setdefault("Referer", "https://dashboard.bidmachine.io/")
     elif key == "unity":
         unity_name = os.getenv("UNITY_NAME")
         unity_token = os.getenv("UNITY_TOKEN")
@@ -291,6 +306,12 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         headers.setdefault("Accept", "text/plain, */*")
     elif key == "inmobi":
         headers.setdefault("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7")
+    elif key == "yandex":
+        token = yandex_access_token_from_env()
+        if token and "Authorization" not in headers:
+            headers["Authorization"] = token if token.lower().startswith(("oauth ", "bearer ")) else f"OAuth {token}"
+        headers.setdefault("Accept", "application/json, text/plain, */*")
+        headers.setdefault("Referer", "https://partner.yandex.ru/")
 
     return SourceAccess(
         name=key,
@@ -298,7 +319,7 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         login=os.getenv(f"{prefix}_LOGIN"),
         password=os.getenv(f"{prefix}_PASSWORD"),
         headers=headers,
-        use_basic_auth=key not in {"inmobi", "unity"},
+        use_basic_auth=key not in {"inmobi", "unity", "yandex"},
         method=method,
         payload=payload,
     )
@@ -318,6 +339,80 @@ def source_headers_from_env(prefix: str) -> dict[str, str]:
 def basic_authorization(login: str, password: str) -> str:
     token = base64.b64encode(f"{login}:{password}".encode("utf-8")).decode("ascii")
     return f"Basic {token}"
+
+
+def is_yandex_oauth_url(url: str | None) -> bool:
+    if not url:
+        return False
+    host = urlparse(url).netloc.lower()
+    return host.endswith("oauth.yandex.ru") or host.endswith("passport.yandex.ru")
+
+
+def yandex_access_token_from_env() -> str | None:
+    explicit_token = os.getenv("YANDEX_ACCESS_TOKEN") or os.getenv("YANDEX_TOKEN")
+    if explicit_token:
+        return explicit_token
+
+    yandex_url = os.getenv("YANDEX_URL")
+    if yandex_url:
+        parsed_url = urlparse(yandex_url)
+        url_params = parse_qs(parsed_url.query)
+        fragment_params = parse_qs(parsed_url.fragment)
+        token_values = fragment_params.get("access_token") or url_params.get("access_token")
+        if token_values and token_values[0]:
+            return token_values[0]
+
+    code = os.getenv("YANDEX_CODE") or yandex_oauth_code_from_url(yandex_url)
+    refresh_token = os.getenv("YANDEX_REFRESH_TOKEN")
+    if code or refresh_token:
+        return fetch_yandex_oauth_token(code=code, refresh_token=refresh_token)
+
+    return None
+
+
+def yandex_oauth_code_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    parsed_url = urlparse(url)
+    code_values = parse_qs(parsed_url.query).get("code")
+    return code_values[0] if code_values else None
+
+
+def fetch_yandex_oauth_token(code: str | None = None, refresh_token: str | None = None) -> str:
+    client_id = os.getenv("YANDEX_CLIENT_ID")
+    client_secret = os.getenv("YANDEX_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise RuntimeError("YANDEX_CLIENT_ID and YANDEX_CLIENT_SECRET are required to request a Yandex OAuth token.")
+
+    form: dict[str, str] = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }
+    if refresh_token:
+        form["grant_type"] = "refresh_token"
+        form["refresh_token"] = refresh_token
+    elif code:
+        form["grant_type"] = "authorization_code"
+        form["code"] = code
+    else:
+        raise RuntimeError("YANDEX_CODE or YANDEX_REFRESH_TOKEN is required to request a Yandex OAuth token.")
+
+    request = Request(
+        "https://oauth.yandex.ru/token",
+        data=urlencode(form).encode("utf-8"),
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "AZON-app-ads-updater/1.0",
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=30) as response:
+        payload = json.loads(response.read().decode("utf-8-sig"))
+    access_token = payload.get("access_token") if isinstance(payload, dict) else None
+    if not isinstance(access_token, str) or not access_token:
+        raise RuntimeError(f"Yandex OAuth response does not contain access_token: {payload}")
+    return access_token
 
 
 def looks_like_ads_txt(text: str) -> bool:
@@ -545,6 +640,8 @@ def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
 def extract_source_text(source: SourceAccess, raw_text: str) -> str:
     if source.name == "bigo":
         return extract_bigo_source_text(raw_text)
+    if source.name == "bidmachine":
+        return extract_bidmachine_source_text(raw_text)
     if source.name == "dtexchange":
         return extract_dtexchange_source_text(raw_text)
     if source.name == "inmobi":
@@ -555,6 +652,8 @@ def extract_source_text(source: SourceAccess, raw_text: str) -> str:
         return extract_mintegral_source_text(source, raw_text)
     if source.name == "unity":
         return extract_unity_source_text(raw_text)
+    if source.name == "yandex":
+        return extract_yandex_source_text(raw_text)
     if source.name in {"liftoff", "vungle"}:
         return extract_vungle_source_text(raw_text)
     return raw_text
@@ -583,6 +682,18 @@ def extract_bigo_source_text(raw_text: str) -> str:
     if not lines:
         raise RuntimeError(f"Bigo JSON response does not contain app-ads.txt lines: {payload}")
     return "\n".join(line.strip() for line in lines if line.strip()) + "\n"
+
+
+def extract_bidmachine_source_text(raw_text: str) -> str:
+    if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")):
+        raise RuntimeError("BidMachine returned the dashboard HTML shell instead of app-ads.txt; provide BIDMACHINE_TOKEN from localStorage access-token or the X-Auth-Token request header.")
+
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    if not lines or not any(is_ads_txt_line(line) for line in lines):
+        preview = " | ".join(line[:160] for line in lines[:10])
+        raise RuntimeError(f"BidMachine source does not contain app-ads.txt lines. Text preview: {preview}")
+
+    return "\n".join(lines) + "\n"
 
 
 def extract_dtexchange_source_text(raw_text: str) -> str:
@@ -745,6 +856,33 @@ def extract_unity_source_text(raw_text: str) -> str:
     if not lines:
         raise RuntimeError(f"Unity JSON response does not contain app-ads.txt lines: {payload}")
     return normalize_ads_txt_lines(lines)
+
+
+def extract_yandex_source_text(raw_text: str) -> str:
+    if looks_like_ads_txt(raw_text):
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        return "\n".join(lines) + "\n"
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        payload = None
+    if payload is not None:
+        lines = extract_ads_lines_from_json_value(payload)
+        if lines:
+            return "\n".join(line.strip() for line in lines if line.strip()) + "\n"
+
+    text = html_to_text(raw_text) if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")) else raw_text
+    lower_text = text.lower()
+    if "passport.yandex" in lower_text or "mode=auth" in lower_text:
+        raise RuntimeError("Yandex returned the login page instead of app-ads.txt lines; provide a valid YANDEX_ACCESS_TOKEN, YANDEX_TOKEN, YANDEX_AUTHORIZATION, YANDEX_CODE, or YANDEX_REFRESH_TOKEN.")
+
+    lines = [" ".join(match.group(1).strip().split()) for match in ADS_LINE_PATTERN.finditer(text)]
+    if not lines:
+        preview_lines = [line.strip() for line in text.splitlines() if line.strip()][:10]
+        preview = " | ".join(line[:160] for line in preview_lines)
+        raise RuntimeError(f"Yandex source does not contain app-ads.txt lines. Text preview: {preview}")
+    return "\n".join(lines) + "\n"
 
 
 def test_source_access(source_name: str) -> None:
