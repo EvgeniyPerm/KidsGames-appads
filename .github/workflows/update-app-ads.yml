@@ -116,6 +116,7 @@ jobs:
           YANDEX_CLIENT_ID: ${{ secrets.YANDEX_CLIENT_ID }}
           YANDEX_CLIENT_SECRET: ${{ secrets.YANDEX_CLIENT_SECRET }}
           YANDEX_AUTHORIZATION: ${{ secrets.YANDEX_AUTHORIZATION }}
+          YANDEX_COOKIE: ${{ secrets.YANDEX_COOKIE }}
           YANDEX_ACCESS_TOKEN: ${{ secrets.YANDEX_ACCESS_TOKEN }}
           YANDEX_TOKEN: ${{ secrets.YANDEX_TOKEN }}
           YANDEX_CODE: ${{ secrets.YANDEX_CODE }}
