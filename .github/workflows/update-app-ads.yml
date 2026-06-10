@@ -100,7 +100,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
           UNITY_NAME: ${{ secrets.UNITY_NAME }}
           UNITY_TOKEN: ${{ secrets.UNITY_TOKEN }}
-          UNITY_AUTHORIZATION: ${{ secrets.UNITY_AUTHORIZATION }}
+          UNITY_AUTHORIZATION: ${{ secrets.UNITY_AUTH || secrets.UNITY_AUTHORIZATION }}
           UNITY_COOKIE: ${{ secrets.UNITY_COOKIE }}
           UNITY_PUBLISHER_WEB_URL: ${{ secrets.UNITY_PUBLISHER_WEB_URL || 'https://www.kidsgames.top/app-ads.txt' }}
           VUNGLE_SOURCE_URL: ${{ secrets.VUNGLE_SOURCE_URL }}
