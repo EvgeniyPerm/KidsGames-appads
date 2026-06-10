@@ -66,6 +66,14 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Restore source cache
+        uses: actions/cache@v4
+        with:
+          path: source-cache
+          key: source-cache-${{ github.run_id }}
+          restore-keys: |
+            source-cache-
+
       - name: Run tests
         run: python -m unittest discover -s tests
 
@@ -126,7 +134,7 @@ jobs:
           INMOBI_PASSWORD: ${{ secrets.INMOBI_PASSWORD }}
           INMOBI_AUTHORIZATION: ${{ secrets.INMOBI_AUTHORIZATION }}
           INMOBI_COOKIE: ${{ secrets.INMOBI_COOKIE }}
-          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE || secrets.UNITY_TOKEN) && 'mintegral,unity,vungle,ironsource,dtexchange,bigo') || 'mintegral,vungle,ironsource,dtexchange,bigo' }}
+          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE || secrets.UNITY_TOKEN) && 'mintegral,unity,vungle,ironsource,dtexchange,yandex') || 'mintegral,vungle,ironsource,dtexchange,yandex' }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}

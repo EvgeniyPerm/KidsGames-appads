@@ -25,6 +25,7 @@ SOURCE_URL = "https://raw.githubusercontent.com/cleveradssolutions/App-ads.txt/m
 DEFAULT_TIMEZONE = "Africa/Johannesburg"
 DEFAULT_FTP_REMOTE_DIR = "tairgames.top"
 LOG_PATH = Path("logs/app-ads-updater.log")
+SOURCE_CACHE_DIR = Path("source-cache")
 WIX_ADS_TXT_URL = "https://www.wixapis.com/promote-seo-robots-server/v2/ads"
 WIX_QUERY_SITES_URL = "https://www.wixapis.com/site-list/v2/sites/query"
 TELEGRAM_SUCCESS_MESSAGE = (
@@ -923,6 +924,7 @@ def test_source_access(source_name: str) -> None:
     if not looks_like_ads_txt(text):
         preview = " | ".join(line[:120] for line in lines[:3])
         raise RuntimeError(f"{source.name} source does not look like app-ads.txt. First lines: {preview}")
+    write_cached_source_text(source.name, text)
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     logging.info(
         "%s source fetched successfully: %s bytes, %s lines, sha256=%s",
@@ -1003,26 +1005,65 @@ def build_output(source_text: str, today: date, extra_source_texts: Iterable[tup
     return f"{azon_text}\n{source_part}\n"
 
 
+def source_cache_path(source_name: str) -> Path:
+    safe_name = re.sub(r"[^a-z0-9_.-]+", "-", source_name.strip().lower())
+    return SOURCE_CACHE_DIR / f"{safe_name}.txt"
+
+
+def read_cached_source_text(source_name: str) -> str | None:
+    path = source_cache_path(source_name)
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8")
+    if not text.strip():
+        return None
+    return text if text.endswith("\n") else text + "\n"
+
+
+def write_cached_source_text(source_name: str, text: str) -> None:
+    SOURCE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    source_cache_path(source_name).write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+
+
+def fetch_one_extra_source_text(source_name: str) -> tuple[str, str]:
+    source = source_access_from_env(source_name)
+    logging.info("Fetching extra source %s.", source.name)
+    raw_text = fetch_text(
+        source.url,
+        login=source.login,
+        password=source.password,
+        extra_headers=source.headers,
+        use_basic_auth=source.use_basic_auth,
+        method=source.method,
+        payload=source.payload,
+    )
+    text = extract_source_text(source, raw_text)
+    if not looks_like_ads_txt(text):
+        preview = " | ".join(line[:120] for line in text.splitlines()[:3])
+        raise RuntimeError(f"{source.name} source does not look like app-ads.txt. First lines: {preview}")
+    write_cached_source_text(source.name, text)
+    return source.name.upper(), text
+
+
 def fetch_extra_source_texts(source_names: Iterable[str]) -> list[tuple[str, str]]:
     extra_source_texts: list[tuple[str, str]] = []
     for source_name in source_names:
-        source = source_access_from_env(source_name)
-        logging.info("Fetching extra source %s.", source.name)
-        raw_text = fetch_text(
-            source.url,
-            login=source.login,
-            password=source.password,
-            extra_headers=source.headers,
-            use_basic_auth=source.use_basic_auth,
-            method=source.method,
-            payload=source.payload,
-        )
-        text = extract_source_text(source, raw_text)
-        if not looks_like_ads_txt(text):
-            preview = " | ".join(line[:120] for line in text.splitlines()[:3])
-            raise RuntimeError(f"{source.name} source does not look like app-ads.txt. First lines: {preview}")
-        logging.info("%s extra source fetched: %s line(s).", source.name, len(text.splitlines()))
-        extra_source_texts.append((source.name.upper(), text))
+        source_key = source_name.strip().lower()
+        try:
+            source_label, text = fetch_one_extra_source_text(source_name)
+            logging.info("%s extra source fetched: %s line(s).", source_key, len(text.splitlines()))
+            extra_source_texts.append((source_label, text))
+        except Exception as exc:
+            cached_text = read_cached_source_text(source_key)
+            if cached_text is None:
+                raise RuntimeError(f"{source_key} source failed and no cached previous version is available.") from exc
+            logging.warning(
+                "%s source failed; using cached previous version with %s line(s). Error: %s",
+                source_key,
+                len(cached_text.splitlines()),
+                exc,
+            )
+            extra_source_texts.append((source_key.upper(), cached_text))
     return extra_source_texts
 
 

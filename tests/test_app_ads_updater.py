@@ -1,5 +1,6 @@
 from datetime import date
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -39,6 +40,62 @@ class AppAdsUpdaterTest(unittest.TestCase):
         )
 
         self.assertIn("# UNITY app-ads.txt\nunity.com, 1579076, DIRECT, 96cabb5fbdde37a7\n", output)
+
+    def test_fetch_extra_source_texts_uses_cached_version_when_source_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_dir = updater.Path(temp_dir)
+            (cache_dir / "yandex.txt").write_text("cached.com, 1, RESELLER\n", encoding="utf-8")
+            calls = []
+
+            def fake_fetch(source_name: str) -> tuple[str, str]:
+                calls.append(source_name)
+                if source_name == "yandex":
+                    raise RuntimeError("expired cookie")
+                return source_name.upper(), "fresh.com, 2, DIRECT\n"
+
+            with patch.object(updater, "SOURCE_CACHE_DIR", cache_dir):
+                with patch.object(updater, "fetch_one_extra_source_text", side_effect=fake_fetch):
+                    output = updater.fetch_extra_source_texts(["yandex", "dtexchange"])
+
+        self.assertEqual(calls, ["yandex", "dtexchange"])
+        self.assertEqual(
+            output,
+            [
+                ("YANDEX", "cached.com, 1, RESELLER\n"),
+                ("DTEXCHANGE", "fresh.com, 2, DIRECT\n"),
+            ],
+        )
+
+    def test_fetch_extra_source_texts_raises_when_source_fails_without_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(updater, "SOURCE_CACHE_DIR", updater.Path(temp_dir)):
+                with patch.object(updater, "fetch_one_extra_source_text", side_effect=RuntimeError("offline")):
+                    with self.assertRaisesRegex(RuntimeError, "no cached previous version"):
+                        updater.fetch_extra_source_texts(["yandex"])
+
+    def test_fetch_one_extra_source_text_writes_cache(self) -> None:
+        source = updater.SourceAccess(
+            name="yandex",
+            url="https://example.com/app-ads.txt",
+            login=None,
+            password=None,
+            headers={},
+            use_basic_auth=False,
+            method="GET",
+            payload=None,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_dir = updater.Path(temp_dir)
+            with patch.object(updater, "SOURCE_CACHE_DIR", cache_dir):
+                with patch.object(updater, "source_access_from_env", return_value=source):
+                    with patch.object(updater, "fetch_text", return_value="fresh.com, 2, DIRECT\n"):
+                        label, text = updater.fetch_one_extra_source_text("yandex")
+
+            cached_text = (cache_dir / "yandex.txt").read_text(encoding="utf-8")
+
+        self.assertEqual(label, "YANDEX")
+        self.assertEqual(text, "fresh.com, 2, DIRECT\n")
+        self.assertEqual(cached_text, "fresh.com, 2, DIRECT\n")
 
     def test_month_day_year_has_no_leading_zero(self) -> None:
         self.assertEqual(updater.month_day_year(date(2026, 5, 13)), "May 13, 2026")
