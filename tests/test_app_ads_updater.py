@@ -59,6 +59,78 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(source.headers, {})
         self.assertTrue(source.use_basic_auth)
 
+    def test_source_access_from_env_uses_default_bigo_url_and_tokens(self) -> None:
+        env = {
+            "BIGO_TOKEN": "token-one",
+            "BIGO_TOKEN2": "token-two",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("bigo")
+
+        self.assertEqual(source.name, "bigo")
+        self.assertEqual(source.url, "https://www.bigossp.com/union/app-ads-txt/developer/list")
+        self.assertEqual(source.headers["x-auth-token"], "token-one")
+        self.assertEqual(source.headers["bigo-ads-uid"], "token-two")
+        self.assertEqual(source.headers["Accept"], "application/json, text/plain, */*")
+        self.assertEqual(source.headers["Content-Type"], "application/json")
+        self.assertEqual(source.method, "POST")
+        self.assertEqual(source.payload, b"{}")
+
+    def test_source_access_from_env_allows_bigo_header_and_payload_override(self) -> None:
+        env = {
+            "BIGO_TOKEN": "token-one",
+            "BIGO_TOKEN2": "token-two",
+            "BIGO_TOKEN_HEADER": "Authorization",
+            "BIGO_TOKEN2_HEADER": "x-second-token",
+            "BIGO_PAYLOAD": "{\"pageNo\":1}",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("bigo")
+
+        self.assertEqual(source.headers["Authorization"], "token-one")
+        self.assertEqual(source.headers["x-second-token"], "token-two")
+        self.assertEqual(source.payload, b'{"pageNo":1}')
+
+    def test_source_access_from_env_uses_default_dtexchange_url(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            source = updater.source_access_from_env("dtexchange")
+
+        self.assertEqual(source.name, "dtexchange")
+        self.assertEqual(source.url, "https://www.digitalturbine.com/dt-app-ads.txt")
+        self.assertTrue(source.use_basic_auth)
+        self.assertEqual(source.method, "GET")
+        self.assertIsNone(source.payload)
+
+    def test_source_access_from_env_uses_default_inmobi_url_and_headers(self) -> None:
+        env = {
+            "INMOBI_AUTHORIZATION": "Bearer token",
+            "INMOBI_COOKIE": "session=value",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("inmobi")
+
+        self.assertEqual(source.name, "inmobi")
+        self.assertEqual(source.url, "https://publisher.inmobi.com/ads-txt/app-ads")
+        self.assertEqual(source.headers["Authorization"], "Bearer token")
+        self.assertEqual(source.headers["Cookie"], "session=value")
+        self.assertIn("text/html", source.headers["Accept"])
+        self.assertFalse(source.use_basic_auth)
+        self.assertEqual(source.method, "GET")
+        self.assertIsNone(source.payload)
+
+    def test_source_access_from_env_uses_default_ironsource_url(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            source = updater.source_access_from_env("ironsource")
+
+        self.assertEqual(source.name, "ironsource")
+        self.assertEqual(
+            source.url,
+            "https://docs.unity.com/en-us/grow/is-ads/user-acquisition/ironsource-exchange/app-ads-txt",
+        )
+        self.assertTrue(source.use_basic_auth)
+        self.assertEqual(source.method, "GET")
+        self.assertIsNone(source.payload)
+
     def test_source_access_from_env_reads_unity_headers(self) -> None:
         env = {
             "UNITY_SOURCE_URL": "https://services.unity.com/api/monetize/app-ads/v1/organizations/1/developers/2/missing-app-ads",
@@ -200,6 +272,176 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertIn("adagio.io, 1522, RESELLER\n", output)
         self.assertIn("adform.com, 3400, RESELLER, 9f5210a2f0999e32\n", output)
         self.assertIn("app-stock.com, 358747, RESELLER\n", output)
+
+    def test_extract_bigo_source_text_reads_nested_json_lines(self) -> None:
+        text = """
+        {
+          "status": 0,
+          "result": {
+            "lines": [
+              "inmobi.com, 23d316d3d980453d8ea0dcf9caec4078, RESELLER, 83e75a7ae333ca9d",
+              {"line": "mindtos.com,mt0b219ff842ee3772, RESELLER"},
+              "not an ads line"
+            ]
+          }
+        }
+        """
+
+        output = updater.extract_bigo_source_text(text)
+
+        self.assertIn("inmobi.com, 23d316d3d980453d8ea0dcf9caec4078, RESELLER, 83e75a7ae333ca9d\n", output)
+        self.assertIn("mindtos.com,mt0b219ff842ee3772, RESELLER\n", output)
+        self.assertNotIn("not an ads line", output)
+
+    def test_extract_bigo_source_text_preserves_duplicate_ads_lines(self) -> None:
+        text = """
+        {
+          "result": [
+            "pubmatic.com, 163754, RESELLER, 5d62403b186f2ace",
+            "pubmatic.com, 163754, RESELLER, 5d62403b186f2ace"
+          ]
+        }
+        """
+
+        output = updater.extract_bigo_source_text(text)
+
+        self.assertEqual(output.count("pubmatic.com, 163754, RESELLER, 5d62403b186f2ace\n"), 2)
+
+    def test_extract_dtexchange_source_text_replaces_publisher_id_and_skips_header(self) -> None:
+        text = """
+        Resellers as of June 01, 2026
+        fyber.com,>>>>> INSERT PUBLISHER ID HERE <<<<<,DIRECT,1ad675c9de6b5176
+        33across.com,0010b00002Xbn7QAAR,RESELLER,bbea06d9c4d2853c
+        Media.net,8CU132UD6,RESELLER,818f58666cabc936
+        """
+
+        output = updater.extract_dtexchange_source_text(text)
+
+        self.assertTrue(output.startswith("fyber.com,230573,DIRECT,1ad675c9de6b5176\n"))
+        self.assertIn("33across.com,0010b00002Xbn7QAAR,RESELLER,bbea06d9c4d2853c\n", output)
+        self.assertIn("Media.net,8CU132UD6,RESELLER,818f58666cabc936\n", output)
+        self.assertNotIn("Resellers as of", output)
+        self.assertNotIn("INSERT PUBLISHER ID", output)
+
+    def test_extract_dtexchange_source_text_preserves_duplicate_reseller_lines(self) -> None:
+        text = """
+        Resellers as of June 01, 2026
+        fyber.com,>>>>> INSERT PUBLISHER ID HERE <<<<<,DIRECT,1ad675c9de6b5176
+        Media.net,8CU132UD6,RESELLER,818f58666cabc936
+        Media.net,8CU132UD6,RESELLER,818f58666cabc936
+        """
+
+        output = updater.extract_dtexchange_source_text(text)
+
+        self.assertEqual(output.count("Media.net,8CU132UD6,RESELLER,818f58666cabc936\n"), 2)
+
+    def test_extract_dtexchange_source_text_preserves_unexpected_nonempty_lines(self) -> None:
+        text = """
+        Resellers as of June 01, 2026
+        fyber.com,>>>>> INSERT PUBLISHER ID HERE <<<<<,DIRECT,1ad675c9de6b5176
+        unexpected source note
+        Media.net,8CU132UD6,RESELLER,818f58666cabc936
+        """
+
+        output = updater.extract_dtexchange_source_text(text)
+
+        self.assertIn("unexpected source note\n", output)
+
+    def test_extract_inmobi_source_text_reads_html_block_after_marker(self) -> None:
+        html = """
+        <!DOCTYPE html>
+        <html>
+          <body>
+            <p>Once selected, copy the lines into your app-ads.txt of apps listed in adjacent section</p>
+            <pre>
+              inmobi.com, 12345, DIRECT, 83e75a7ae333ca9d
+              rubiconproject.com, 26132, RESELLER, 0bfd66d529a55807
+              not an ads line
+            </pre>
+          </body>
+        </html>
+        """
+
+        output = updater.extract_inmobi_source_text(html)
+
+        self.assertEqual(
+            output,
+            "\n".join(
+                [
+                    "inmobi.com, 12345, DIRECT, 83e75a7ae333ca9d",
+                    "rubiconproject.com, 26132, RESELLER, 0bfd66d529a55807",
+                    "",
+                ]
+            ),
+        )
+
+    def test_extract_inmobi_source_text_preserves_duplicate_ads_lines(self) -> None:
+        text = """
+        Once selected, copy the lines into your app-ads.txt of apps listed in adjacent section
+        inmobi.com, 12345, DIRECT, 83e75a7ae333ca9d
+        inmobi.com, 12345, DIRECT, 83e75a7ae333ca9d
+        rubiconproject.com, 26132, RESELLER, 0bfd66d529a55807
+        """
+
+        output = updater.extract_inmobi_source_text(text)
+
+        self.assertEqual(output.count("inmobi.com, 12345, DIRECT, 83e75a7ae333ca9d\n"), 2)
+
+    def test_extract_inmobi_source_text_reports_login_shell(self) -> None:
+        text = """<html><script>window['inmobiConf'] = {"loginUrl":"https://iam.inmobi.com/iam/v3/user/signin"}</script></html>"""
+
+        with self.assertRaisesRegex(RuntimeError, "authenticated session"):
+            updater.extract_inmobi_source_text(text)
+
+    def test_extract_ironsource_source_text_replaces_account_and_owner_domain(self) -> None:
+        html = """
+        <!DOCTYPE html>
+        <html>
+          <body>
+            <h2>ironSource authorized resellers</h2>
+            <pre>
+              OWNERDOMAIN=[yourdomain.com]
+              ironsrc.com, [yourironSourcePublisherAccountID], Direct
+              Remember to replace the OwnerDomain Line with your domain.
+              blueseasx.com, 203625, RESELLER
+              rubiconproject.com, 26132, RESELLER, 0bfd66d529a55807
+            </pre>
+          </body>
+        </html>
+        """
+
+        output = updater.extract_ironsource_source_text(html)
+
+        self.assertTrue(output.startswith("ironsrc.com, 338629, Direct\nOwnerDomain=kidsgames.top\n"))
+        self.assertIn("blueseasx.com, 203625, RESELLER\n", output)
+        self.assertIn("rubiconproject.com, 26132, RESELLER, 0bfd66d529a55807\n", output)
+        self.assertNotIn("[yourironSourcePublisherAccountID]", output)
+        self.assertNotIn("[yourdomain.com]", output)
+
+    def test_extract_ironsource_source_text_reads_flattened_docs_block(self) -> None:
+        text = (
+            "intro ironSource authorized resellers OWNERDOMAIN=[yourdomain.com]"
+            "ironsrc.com, [yourironSourcePublisherAccountID], Direct "
+            "Remember to replace [yourironSourcePublisherAccountID] "
+            "blueseasx.com, 203625, RESELLER rubiconproject.com, 26132, RESELLER, 0bfd66d529a55807"
+        )
+
+        output = updater.extract_ironsource_source_text(text)
+
+        self.assertIn("blueseasx.com, 203625, RESELLER\n", output)
+        self.assertIn("rubiconproject.com, 26132, RESELLER, 0bfd66d529a55807\n", output)
+
+    def test_extract_ironsource_source_text_preserves_duplicate_reseller_lines(self) -> None:
+        text = """
+        ironSource authorized resellers
+        rubiconproject.com, 24600, RESELLER, 0bfd66d529a55807
+        rubiconproject.com, 24600, RESELLER, 0bfd66d529a55807
+        blueseasx.com, 203625, RESELLER
+        """
+
+        output = updater.extract_ironsource_source_text(text)
+
+        self.assertEqual(output.count("rubiconproject.com, 24600, RESELLER, 0bfd66d529a55807\n"), 2)
 
     def test_extract_vungle_source_text_replaces_first_line(self) -> None:
         text = """

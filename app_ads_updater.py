@@ -58,6 +58,10 @@ MONTHS = {
 }
 
 SOURCE_ENV_PREFIXES = {
+    "bigo": "BIGO",
+    "dtexchange": "DTEXCHANGE",
+    "inmobi": "INMOBI",
+    "ironsource": "IRONSOURCE",
     "mintegral": "MINTEGRAL",
     "unity": "UNITY",
     "liftoff": "VUNGLE",
@@ -79,6 +83,18 @@ MINTEGRAL_MARKER_PATTERN = re.compile(
 )
 VUNGLE_SOURCE_URL = "https://pub-ctrl-api.vungle.com/api/v1/adstxt/vungle"
 VUNGLE_FIRST_LINE = "vungle.com,669477b160e2ea00114a81e3,DIRECT,c107d686becd2d77"
+BIGO_SOURCE_URL = "https://www.bigossp.com/union/app-ads-txt/developer/list"
+DTEXCHANGE_SOURCE_URL = "https://www.digitalturbine.com/dt-app-ads.txt"
+DTEXCHANGE_FIRST_LINE = "fyber.com,230573,DIRECT,1ad675c9de6b5176"
+INMOBI_SOURCE_URL = "https://publisher.inmobi.com/ads-txt/app-ads"
+INMOBI_MARKER_PATTERN = re.compile(
+    r"once\s+selected,\s+copy\s+the\s+lines\s+into\s+your\s+app-ads\.txt\s+of\s+apps\s+listed\s+in\s+adjacent\s+section",
+    re.IGNORECASE,
+)
+IRONSOURCE_SOURCE_URL = "https://docs.unity.com/en-us/grow/is-ads/user-acquisition/ironsource-exchange/app-ads-txt"
+IRONSOURCE_FIRST_LINE = "ironsrc.com, 338629, Direct"
+IRONSOURCE_OWNER_DOMAIN_LINE = "OwnerDomain=kidsgames.top"
+IRONSOURCE_MARKER_PATTERN = re.compile(r"ironsource\s+authorized\s+resellers", re.IGNORECASE)
 ADS_LINE_PATTERN = re.compile(
     r"([a-z0-9.-]+\.[a-z]{2,}\s*,\s*(?:your\s+PublisherID|[^,\s<]+)\s*,\s*(?:DIRECT|RESELLER)(?:\s*,\s*[^,\s<]+)?)",
     re.IGNORECASE,
@@ -228,6 +244,14 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         raise RuntimeError(f"Unknown source {source_name!r}. Known sources: {known}")
 
     url = os.getenv(f"{prefix}_SOURCE_URL")
+    if key == "bigo":
+        url = url or BIGO_SOURCE_URL
+    if key == "dtexchange":
+        url = url or DTEXCHANGE_SOURCE_URL
+    if key == "inmobi":
+        url = url or INMOBI_SOURCE_URL
+    if key == "ironsource":
+        url = url or IRONSOURCE_SOURCE_URL
     if key in {"liftoff", "vungle"}:
         url = url or VUNGLE_SOURCE_URL
     if not url:
@@ -236,7 +260,20 @@ def source_access_from_env(source_name: str) -> SourceAccess:
     headers = source_headers_from_env(prefix)
     method = "GET"
     payload = None
-    if key == "unity":
+    if key == "bigo":
+        bigo_token = os.getenv("BIGO_TOKEN")
+        bigo_token2 = os.getenv("BIGO_TOKEN2")
+        if bigo_token:
+            headers[os.getenv("BIGO_TOKEN_HEADER", "x-auth-token")] = bigo_token
+        if bigo_token2:
+            headers[os.getenv("BIGO_TOKEN2_HEADER", "bigo-ads-uid")] = bigo_token2
+        headers.setdefault("Accept", "application/json, text/plain, */*")
+        headers.setdefault("Content-Type", "application/json")
+        headers.setdefault("Origin", "https://www.bigossp.com")
+        headers.setdefault("Referer", "https://www.bigossp.com/media/appAdsTxt/developer")
+        method = "POST"
+        payload = (os.getenv("BIGO_PAYLOAD") or "{}").encode("utf-8")
+    elif key == "unity":
         unity_name = os.getenv("UNITY_NAME")
         unity_token = os.getenv("UNITY_TOKEN")
         if unity_name and unity_token:
@@ -252,6 +289,8 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         payload = json.dumps({"publisherWebUrl": publisher_web_url}).encode("utf-8")
     elif key in {"liftoff", "vungle"}:
         headers.setdefault("Accept", "text/plain, */*")
+    elif key == "inmobi":
+        headers.setdefault("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7")
 
     return SourceAccess(
         name=key,
@@ -259,7 +298,7 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         login=os.getenv(f"{prefix}_LOGIN"),
         password=os.getenv(f"{prefix}_PASSWORD"),
         headers=headers,
-        use_basic_auth=key != "unity",
+        use_basic_auth=key not in {"inmobi", "unity"},
         method=method,
         payload=payload,
     )
@@ -504,6 +543,14 @@ def extract_mintegral_source_text(source: SourceAccess, raw_text: str) -> str:
 
 
 def extract_source_text(source: SourceAccess, raw_text: str) -> str:
+    if source.name == "bigo":
+        return extract_bigo_source_text(raw_text)
+    if source.name == "dtexchange":
+        return extract_dtexchange_source_text(raw_text)
+    if source.name == "inmobi":
+        return extract_inmobi_source_text(raw_text)
+    if source.name == "ironsource":
+        return extract_ironsource_source_text(raw_text)
     if source.name == "mintegral":
         return extract_mintegral_source_text(source, raw_text)
     if source.name == "unity":
@@ -517,6 +564,120 @@ def normalize_ads_txt_lines(lines: Iterable[str]) -> str:
     output_lines = [line.strip() for line in lines if is_ads_txt_line(line.strip())]
     if not output_lines:
         raise RuntimeError("No app-ads.txt lines were extracted.")
+    return "\n".join(output_lines) + "\n"
+
+
+def extract_bigo_source_text(raw_text: str) -> str:
+    if looks_like_ads_txt(raw_text):
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        return "\n".join(lines) + "\n"
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        preview_lines = [line.strip() for line in raw_text.splitlines() if line.strip()][:10]
+        preview = " | ".join(line[:160] for line in preview_lines)
+        raise RuntimeError(f"Bigo source is not app-ads.txt text or JSON. Text preview: {preview}") from exc
+
+    lines = extract_ads_lines_from_json_value(payload)
+    if not lines:
+        raise RuntimeError(f"Bigo JSON response does not contain app-ads.txt lines: {payload}")
+    return "\n".join(line.strip() for line in lines if line.strip()) + "\n"
+
+
+def extract_dtexchange_source_text(raw_text: str) -> str:
+    lines = [line.strip() for line in raw_text.splitlines()]
+    meaningful_lines = [line for line in lines if line]
+    if len(meaningful_lines) < 2:
+        raise RuntimeError("DT Exchange source has fewer than two lines.")
+    if not meaningful_lines[0].lower().startswith("resellers as of "):
+        raise RuntimeError(f"DT Exchange source first line is unexpected: {meaningful_lines[0]!r}")
+
+    output_lines = [DTEXCHANGE_FIRST_LINE]
+    for line in meaningful_lines[2:]:
+        output_lines.append(line)
+
+    if len(output_lines) == 1:
+        raise RuntimeError("DT Exchange source was found, but no reseller lines were extracted.")
+
+    return "\n".join(output_lines) + "\n"
+
+
+def extract_inmobi_source_text(raw_text: str) -> str:
+    if looks_like_ads_txt(raw_text):
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        return "\n".join(lines) + "\n"
+
+    if "loginUrl" in raw_text and "iam.inmobi.com" in raw_text:
+        raise RuntimeError("InMobi returned the login shell instead of the sellers list; provide INMOBI_COOKIE or INMOBI_AUTHORIZATION for an authenticated session.")
+
+    candidate_lines: list[str] = []
+    if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")):
+        html_marker_match = INMOBI_MARKER_PATTERN.search(raw_text)
+        if html_marker_match:
+            after_marker_html = raw_text[html_marker_match.end() :]
+            pre_match = re.search(r"(?is)<pre\b[^>]*>(.*?)</pre>", after_marker_html)
+            code_area = pre_match.group(1) if pre_match else after_marker_html
+            candidate_lines = [
+                html.unescape(re.sub(r"<[^>]+>", "", match.group(1))).strip()
+                for match in re.finditer(r"(?is)<span\b[^>]*(?:Typography-code|code)[^>]*>(.*?)</span>", code_area)
+            ]
+
+    text = html_to_text(raw_text) if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")) else raw_text
+    marker_match = INMOBI_MARKER_PATTERN.search(text)
+    if marker_match and not candidate_lines:
+        after_marker = text[marker_match.end() :]
+        candidate_lines = [line.strip() for line in after_marker.splitlines()]
+    elif not marker_match and not candidate_lines:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        candidate_lines = lines if any(is_ads_txt_line(line) for line in lines) else []
+
+    output_lines = [line for line in candidate_lines if line and is_ads_txt_line(line)]
+    if not output_lines:
+        preview_lines = [line.strip() for line in text.splitlines() if line.strip()][:10]
+        preview = " | ".join(line[:160] for line in preview_lines)
+        raise RuntimeError(f"InMobi seller block was not found or contained no app-ads.txt lines. Text preview: {preview}")
+
+    return "\n".join(output_lines) + "\n"
+
+
+def extract_ironsource_source_text(raw_text: str) -> str:
+    text = html_to_text(raw_text) if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")) else raw_text
+    marker_match = IRONSOURCE_MARKER_PATTERN.search(text)
+    if not marker_match:
+        preview_lines = [line.strip() for line in text.splitlines() if line.strip()][:10]
+        preview = " | ".join(line[:160] for line in preview_lines)
+        raise RuntimeError(f"ironSource authorized resellers marker was not found. Text preview: {preview}")
+
+    after_marker = text[marker_match.end() :]
+    output_lines = [IRONSOURCE_FIRST_LINE, IRONSOURCE_OWNER_DOMAIN_LINE]
+
+    candidate_lines: list[str] = []
+    if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")):
+        html_marker_match = IRONSOURCE_MARKER_PATTERN.search(raw_text)
+        if html_marker_match:
+            pre_match = re.search(r"(?is)<pre\b[^>]*>(.*?)</pre>", raw_text[html_marker_match.end() :])
+            if pre_match:
+                candidate_lines = [
+                    html.unescape(re.sub(r"<[^>]+>", "", match.group(1))).strip()
+                    for match in re.finditer(r"(?is)<span\b[^>]*Typography-code[^>]*>(.*?)</span>", pre_match.group(1))
+                ]
+
+    if not candidate_lines:
+        candidate_lines = [" ".join(match.group(1).strip().split()) for match in ADS_LINE_PATTERN.finditer(after_marker)]
+
+    for line in candidate_lines:
+        line = line.strip()
+        if not is_ads_txt_line(line):
+            continue
+        domain = line.split(",", 1)[0].strip().lower()
+        if domain == "ironsrc.com":
+            continue
+        output_lines.append(line)
+
+    if len(output_lines) == 2:
+        raise RuntimeError("ironSource reseller block was found, but no reseller lines were extracted.")
+
     return "\n".join(output_lines) + "\n"
 
 
@@ -588,11 +749,15 @@ def extract_unity_source_text(raw_text: str) -> str:
 
 def test_source_access(source_name: str) -> None:
     source = source_access_from_env(source_name)
+    has_auth_headers = any(
+        header.lower() in {"authorization", "cookie", "x-auth-token", "bigo-ads-uid"}
+        for header in source.headers
+    )
     if source.name == "unity" and os.getenv("UNITY_NAME") and os.getenv("UNITY_TOKEN"):
         auth_state = "with UNITY_NAME/UNITY_TOKEN basic auth"
     elif source.name == "unity" and os.getenv("UNITY_TOKEN"):
         auth_state = "with UNITY_TOKEN bearer auth"
-    elif source.headers:
+    elif has_auth_headers:
         auth_state = "with custom headers"
     elif source.use_basic_auth and source.login and source.password:
         auth_state = "with login/password"

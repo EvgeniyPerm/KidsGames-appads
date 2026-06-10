@@ -98,7 +98,22 @@ jobs:
           VUNGLE_SOURCE_URL: ${{ secrets.VUNGLE_SOURCE_URL }}
           VUNGLE_AUTHORIZATION: ${{ secrets.VUNGLE_AUTHORIZATION }}
           VUNGLE_COOKIE: ${{ secrets.VUNGLE_COOKIE }}
-          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE || secrets.UNITY_TOKEN) && 'mintegral,unity,vungle') || 'mintegral,vungle' }}
+          IRONSOURCE_SOURCE_URL: ${{ secrets.IRONSOURCE_SOURCE_URL }}
+          DTEXCHANGE_SOURCE_URL: ${{ secrets.DTEXCHANGE_SOURCE_URL }}
+          BIGO_SOURCE_URL: ${{ secrets.BIGO_SOURCE_URL }}
+          BIGO_TOKEN: ${{ secrets.BIGO_TOKEN }}
+          BIGO_TOKEN2: ${{ secrets.BIGO_TOKEN2 }}
+          BIGO_TOKEN_HEADER: ${{ secrets.BIGO_TOKEN_HEADER || 'x-auth-token' }}
+          BIGO_TOKEN2_HEADER: ${{ secrets.BIGO_TOKEN2_HEADER || 'bigo-ads-uid' }}
+          BIGO_PAYLOAD: ${{ secrets.BIGO_PAYLOAD || '{}' }}
+          BIGO_LOGIN: ${{ secrets.BIGO_LOGIN }}
+          BIGO_PASSWORD: ${{ secrets.BIGO_PASSWORD }}
+          INMOBI_SOURCE_URL: ${{ secrets.INMOBI_SOURCE_URL }}
+          INMOBI_LOGIN: ${{ secrets.INMOBI_LOGIN }}
+          INMOBI_PASSWORD: ${{ secrets.INMOBI_PASSWORD }}
+          INMOBI_AUTHORIZATION: ${{ secrets.INMOBI_AUTHORIZATION }}
+          INMOBI_COOKIE: ${{ secrets.INMOBI_COOKIE }}
+          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE || secrets.UNITY_TOKEN) && 'mintegral,unity,vungle,ironsource,dtexchange,bigo') || 'mintegral,vungle,ironsource,dtexchange,bigo' }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}
