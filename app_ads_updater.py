@@ -766,15 +766,20 @@ def test_source_access(source_name: str) -> None:
     logging.info("Testing %s source access %s.", source.name, auth_state)
     parsed_url = urlparse(source.url)
     logging.info("Testing %s endpoint %s%s.", source.name, parsed_url.netloc, parsed_url.path)
-    raw_text = fetch_text(
-        source.url,
-        login=source.login,
-        password=source.password,
-        extra_headers=source.headers,
-        use_basic_auth=source.use_basic_auth,
-        method=source.method,
-        payload=source.payload,
-    )
+    try:
+        raw_text = fetch_text(
+            source.url,
+            login=source.login,
+            password=source.password,
+            extra_headers=source.headers,
+            use_basic_auth=source.use_basic_auth,
+            method=source.method,
+            payload=source.payload,
+        )
+    except HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        preview = " | ".join(line.strip() for line in error_body.splitlines() if line.strip())[:500]
+        raise RuntimeError(f"{source.name} source HTTP {exc.code}: {preview}") from exc
     text = extract_source_text(source, raw_text)
     lines = text.splitlines()
     if not looks_like_ads_txt(text):
