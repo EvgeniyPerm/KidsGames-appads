@@ -254,7 +254,7 @@ class AppAdsUpdaterTest(unittest.TestCase):
     def test_source_access_from_env_reads_unity_headers(self) -> None:
         env = {
             "UNITY_SOURCE_URL": "https://services.unity.com/api/monetize/app-ads/v1/organizations/1/developers/2/missing-app-ads",
-            "UNITY_AUTHORIZATION": "Bearer token",
+            "UNITY_AUTH": "Bearer token",
             "UNITY_COOKIE": "session=value",
         }
         with patch.dict(os.environ, env, clear=True):
@@ -305,6 +305,17 @@ class AppAdsUpdaterTest(unittest.TestCase):
 
         self.assertEqual(source.headers["Authorization"], "Bearer dashboard-token")
 
+    def test_source_access_from_env_prefers_unity_auth_alias_over_authorization(self) -> None:
+        env = {
+            "UNITY_SOURCE_URL": "https://services.unity.com/api/monetize/app-ads/v1/organizations/1/developers/2/missing-app-ads",
+            "UNITY_AUTH": "Bearer fresh-token",
+            "UNITY_AUTHORIZATION": "Bearer old-token",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("unity")
+
+        self.assertEqual(source.headers["Authorization"], "Bearer fresh-token")
+
     def test_source_access_from_env_uses_default_vungle_url(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             source = updater.source_access_from_env("vungle")
@@ -335,7 +346,7 @@ class AppAdsUpdaterTest(unittest.TestCase):
         text = "<!DOCTYPE html>\n<html lang=\"en\">\n"
         self.assertFalse(updater.looks_like_ads_txt(text))
 
-    def test_extract_unity_source_text_accepts_plain_ads_txt(self) -> None:
+    def test_extract_unity_source_text_preserves_plain_source_lines(self) -> None:
         text = """
         unity.com, 1579076, DIRECT, 96cabb5fbdde37a7
         ignored
@@ -349,6 +360,7 @@ class AppAdsUpdaterTest(unittest.TestCase):
             "\n".join(
                 [
                     "unity.com, 1579076, DIRECT, 96cabb5fbdde37a7",
+                    "ignored",
                     "adform.com, 3400, RESELLER, 9f5210a2f0999e32",
                     "",
                 ]

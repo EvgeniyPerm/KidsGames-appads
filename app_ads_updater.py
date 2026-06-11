@@ -141,6 +141,7 @@ class Settings:
     wix_site_id: str | None
     wix_account_id: str | None
     wix_enabled: bool
+    notifications_enabled: bool
     verify_urls: tuple[str, ...]
     extra_source_names: tuple[str, ...]
 
@@ -220,6 +221,7 @@ def env_settings() -> Settings:
         wix_site_id=env("WIX_SITE_ID"),
         wix_account_id=env("WIX_ACCOUNT_ID"),
         wix_enabled=(env("WIX_ENABLED", "false") or "").lower() == "true",
+        notifications_enabled=(env("NOTIFICATIONS_ENABLED", "false") or "").lower() == "true",
         verify_urls=verify_urls,
         extra_source_names=extra_source_names,
     )
@@ -296,6 +298,9 @@ def source_access_from_env(source_name: str) -> SourceAccess:
     elif key == "unity":
         unity_name = os.getenv("UNITY_NAME")
         unity_token = os.getenv("UNITY_TOKEN")
+        unity_auth = os.getenv("UNITY_AUTH")
+        if unity_auth:
+            headers["Authorization"] = unity_auth
         if "Authorization" in headers:
             pass
         elif unity_name and unity_token:
@@ -668,9 +673,9 @@ def extract_source_text(source: SourceAccess, raw_text: str) -> str:
     return raw_text
 
 
-def normalize_ads_txt_lines(lines: Iterable[str]) -> str:
-    output_lines = [line.strip() for line in lines if is_ads_txt_line(line.strip())]
-    if not output_lines:
+def source_text_from_lines(lines: Iterable[str]) -> str:
+    output_lines = [line.strip() for line in lines if line.strip()]
+    if not any(is_ads_txt_line(line) for line in output_lines):
         raise RuntimeError("No app-ads.txt lines were extracted.")
     return "\n".join(output_lines) + "\n"
 
@@ -848,7 +853,7 @@ def extract_ads_lines_from_json_value(value: object) -> list[str]:
 
 def extract_unity_source_text(raw_text: str) -> str:
     if looks_like_ads_txt(raw_text):
-        return normalize_ads_txt_lines(raw_text.splitlines())
+        return source_text_from_lines(raw_text.splitlines())
 
     try:
         payload = json.loads(raw_text)
@@ -856,7 +861,7 @@ def extract_unity_source_text(raw_text: str) -> str:
         text = html_to_text(raw_text) if raw_text.lstrip().lower().startswith(("<!doctype html", "<html")) else raw_text
         lines = extract_ads_lines_from_json_value(text)
         if lines:
-            return normalize_ads_txt_lines(lines)
+            return source_text_from_lines(lines)
         preview_lines = [line.strip() for line in text.splitlines() if line.strip()][:10]
         preview = " | ".join(line[:160] for line in preview_lines)
         raise RuntimeError(f"Unity source is not app-ads.txt text, JSON, or HTML with app-ads.txt lines. Text preview: {preview}") from exc
@@ -864,7 +869,7 @@ def extract_unity_source_text(raw_text: str) -> str:
     lines = extract_ads_lines_from_json_value(payload)
     if not lines:
         raise RuntimeError(f"Unity JSON response does not contain app-ads.txt lines: {payload}")
-    return normalize_ads_txt_lines(lines)
+    return source_text_from_lines(lines)
 
 
 def extract_yandex_source_text(raw_text: str, first_lines: Iterable[str] = ()) -> str:
@@ -900,8 +905,8 @@ def test_source_access(source_name: str) -> None:
         header.lower() in {"authorization", "cookie", "x-auth-token", "bigo-ads-uid"}
         for header in source.headers
     )
-    if source.name == "unity" and "Authorization" in source.headers and os.getenv("UNITY_AUTHORIZATION"):
-        auth_state = "with UNITY_AUTHORIZATION"
+    if source.name == "unity" and "Authorization" in source.headers and (os.getenv("UNITY_AUTH") or os.getenv("UNITY_AUTHORIZATION")):
+        auth_state = "with UNITY_AUTH"
     elif source.name == "unity" and os.getenv("UNITY_NAME") and os.getenv("UNITY_TOKEN"):
         auth_state = "with UNITY_NAME/UNITY_TOKEN basic auth"
     elif source.name == "unity" and os.getenv("UNITY_TOKEN"):
@@ -1299,6 +1304,9 @@ def update_wix_ads_txt(settings: Settings, content: str) -> None:
 
 
 def send_telegram(settings: Settings, message: str) -> None:
+    if not settings.notifications_enabled:
+        logging.warning("Notifications are disabled; Telegram notification skipped.")
+        return
     if not settings.telegram_bot_token or not settings.telegram_chat_id:
         logging.warning("Telegram secrets are missing; notification skipped.")
         return

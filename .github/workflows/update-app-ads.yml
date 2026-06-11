@@ -51,6 +51,14 @@ on:
         description: "Fetch one configured source without updating, for example: mintegral"
         required: false
         type: string
+      fail_on_error:
+        description: "Fail the workflow on errors and allow GitHub failure notifications"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   update:
@@ -75,9 +83,11 @@ jobs:
             source-cache-
 
       - name: Run tests
+        continue-on-error: ${{ github.event.inputs.fail_on_error != 'true' }}
         run: python -m unittest discover -s tests
 
       - name: Update files
+        continue-on-error: ${{ github.event.inputs.fail_on_error != 'true' }}
         env:
           APP_TIMEZONE: Africa/Johannesburg
           FTP_HOST: ${{ secrets.FTP_HOST }}
@@ -87,6 +97,7 @@ jobs:
           FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NOTIFICATIONS_ENABLED: ${{ secrets.NOTIFICATIONS_ENABLED || 'false' }}
           WIX_API_KEY: ${{ secrets.WIX_API_KEY }}
           WIX_API_KEY2: ${{ secrets.WIX_API_KEY2 }}
           WIX_SITE_ID: ${{ secrets.WIX_SITE_ID }}
@@ -100,6 +111,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
           UNITY_NAME: ${{ secrets.UNITY_NAME }}
           UNITY_TOKEN: ${{ secrets.UNITY_TOKEN }}
+          UNITY_AUTH: ${{ secrets.UNITY_AUTH }}
           UNITY_AUTHORIZATION: ${{ secrets.UNITY_AUTH || secrets.UNITY_AUTHORIZATION }}
           UNITY_COOKIE: ${{ secrets.UNITY_COOKIE }}
           UNITY_PUBLISHER_WEB_URL: ${{ secrets.UNITY_PUBLISHER_WEB_URL || 'https://www.kidsgames.top/app-ads.txt' }}
@@ -154,7 +166,7 @@ jobs:
           INMOBI_PASSWORD: ${{ secrets.INMOBI_PASSWORD }}
           INMOBI_AUTHORIZATION: ${{ secrets.INMOBI_AUTHORIZATION }}
           INMOBI_COOKIE: ${{ secrets.INMOBI_COOKIE }}
-          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE || secrets.UNITY_TOKEN) && 'mintegral,unity,vungle,ironsource,dtexchange,yandex') || 'mintegral,vungle,ironsource,dtexchange,yandex' }}
+          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTH || secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE || secrets.UNITY_TOKEN) && 'mintegral,unity,vungle,ironsource,dtexchange,yandex') || 'mintegral,vungle,ironsource,dtexchange,yandex' }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}
