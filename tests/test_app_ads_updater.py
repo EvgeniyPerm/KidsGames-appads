@@ -316,6 +316,17 @@ class AppAdsUpdaterTest(unittest.TestCase):
 
         self.assertEqual(source.headers["Authorization"], "Bearer fresh-token")
 
+    def test_source_access_from_env_prefers_unityads_auth_over_unity_auth(self) -> None:
+        env = {
+            "UNITY_SOURCE_URL": "https://services.unity.com/api/monetize/app-ads/v1/organizations/1/developers/2/missing-app-ads",
+            "UNITYADS_AUTH": "Bearer unityads-token",
+            "UNITY_AUTH": "Bearer dashboard-token",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            source = updater.source_access_from_env("unity")
+
+        self.assertEqual(source.headers["Authorization"], "Bearer unityads-token")
+
     def test_source_access_from_env_uses_default_vungle_url(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             source = updater.source_access_from_env("vungle")

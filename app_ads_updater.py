@@ -298,7 +298,7 @@ def source_access_from_env(source_name: str) -> SourceAccess:
     elif key == "unity":
         unity_name = os.getenv("UNITY_NAME")
         unity_token = os.getenv("UNITY_TOKEN")
-        unity_auth = os.getenv("UNITY_AUTH")
+        unity_auth = os.getenv("UNITYADS_AUTH") or os.getenv("UNITY_AUTH")
         if unity_auth:
             headers["Authorization"] = unity_auth
         if "Authorization" in headers:
@@ -905,7 +905,7 @@ def test_source_access(source_name: str) -> None:
         header.lower() in {"authorization", "cookie", "x-auth-token", "bigo-ads-uid"}
         for header in source.headers
     )
-    if source.name == "unity" and "Authorization" in source.headers and (os.getenv("UNITY_AUTH") or os.getenv("UNITY_AUTHORIZATION")):
+    if source.name == "unity" and "Authorization" in source.headers and (os.getenv("UNITYADS_AUTH") or os.getenv("UNITY_AUTH") or os.getenv("UNITY_AUTHORIZATION")):
         auth_state = "with UNITY_AUTH"
     elif source.name == "unity" and os.getenv("UNITY_NAME") and os.getenv("UNITY_TOKEN"):
         auth_state = "with UNITY_NAME/UNITY_TOKEN basic auth"
