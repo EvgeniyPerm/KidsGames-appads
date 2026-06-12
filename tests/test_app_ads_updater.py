@@ -359,6 +359,12 @@ class AppAdsUpdaterTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Unknown source"):
             updater.source_access_from_env("unknown")
 
+    def test_test_source_access_dispatches_unityads_auth_diagnostic(self) -> None:
+        with patch.object(updater, "test_unityads_auth_variants") as diagnostic:
+            updater.test_source_access("unityads-auth")
+
+        diagnostic.assert_called_once_with()
+
     def test_looks_like_ads_txt_accepts_ads_line(self) -> None:
         text = "# Network\nexample.com, pub-123, DIRECT, abcdef\n"
         self.assertTrue(updater.looks_like_ads_txt(text))

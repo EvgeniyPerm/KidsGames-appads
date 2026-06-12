@@ -904,6 +904,10 @@ def extract_yandex_source_text(raw_text: str, first_lines: Iterable[str] = ()) -
 
 
 def test_source_access(source_name: str) -> None:
+    if source_name.strip().lower() == "unityads-auth":
+        test_unityads_auth_variants()
+        return
+
     source = source_access_from_env(source_name)
     has_auth_headers = any(
         header.lower() in {"authorization", "cookie", "x-auth-token", "bigo-ads-uid"}
@@ -959,6 +963,59 @@ def test_source_access(source_name: str) -> None:
         tail_start = len(lines) - len(tail) + 1
         for index, line in enumerate(tail, start=tail_start):
             logging.info("%s line %s: %s", source.name, index, line[:300])
+
+
+def test_unityads_auth_variants() -> None:
+    token = os.getenv("UNITYADS_AUTH")
+    if not token:
+        raise RuntimeError("UNITYADS_AUTH is required for this diagnostic.")
+
+    url = os.getenv("UNITY_SOURCE_URL") or "https://services.unity.com/api/monetize/app-ads/v1/organizations/4525801/developers/1579076/missing-app-ads"
+    publisher_web_url = os.getenv("UNITY_PUBLISHER_WEB_URL", "https://www.kidsgames.top/app-ads.txt")
+    payload = json.dumps({"publisherWebUrl": publisher_web_url}).encode("utf-8")
+    base_headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Content-Type": "application/json",
+        "Origin": "https://cloud.unity.com",
+        "x-client-id": "unity-dashboard",
+    }
+    variants = [
+        ("authorization_raw", {"Authorization": token}),
+        ("authorization_bearer", {"Authorization": authorization_header(token)}),
+        ("x_api_key", {"X-API-Key": token}),
+        ("x_api_token", {"X-API-Token": token}),
+        ("x_unity_api_key", {"X-Unity-API-Key": token}),
+        ("api_key", {"api-key": token}),
+    ]
+
+    successes = 0
+    for label, auth_headers in variants:
+        headers = {**base_headers, **auth_headers}
+        logging.info("Testing UNITYADS_AUTH variant %s.", label)
+        request = Request(url, data=payload, headers=headers, method="POST")
+        try:
+            with urlopen(request, timeout=30) as response:
+                raw_text = response.read().decode("utf-8-sig")
+        except HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            preview = " | ".join(line.strip() for line in error_body.splitlines() if line.strip())[:300]
+            logging.warning("UNITYADS_AUTH variant %s failed HTTP %s: %s", label, exc.code, preview)
+            continue
+
+        text = extract_unity_source_text(raw_text)
+        lines = text.splitlines()
+        logging.info(
+            "UNITYADS_AUTH variant %s succeeded: %s bytes, %s lines.",
+            label,
+            len(text.encode("utf-8")),
+            len(lines),
+        )
+        for index, line in enumerate(lines[:5], start=1):
+            logging.info("unityads-auth %s line %s: %s", label, index, line[:300])
+        successes += 1
+
+    if not successes:
+        raise RuntimeError("UNITYADS_AUTH did not authenticate with any tested header variant.")
 
 
 def parse_date_from_line(line: str) -> date | None:
