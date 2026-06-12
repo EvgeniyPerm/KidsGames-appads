@@ -300,7 +300,7 @@ def source_access_from_env(source_name: str) -> SourceAccess:
         unity_token = os.getenv("UNITY_TOKEN")
         unity_auth = os.getenv("UNITYADS_AUTH") or os.getenv("UNITY_AUTH")
         if unity_auth:
-            headers["Authorization"] = unity_auth
+            headers["Authorization"] = authorization_header(unity_auth)
         if "Authorization" in headers:
             pass
         elif unity_name and unity_token:
@@ -351,6 +351,10 @@ def source_headers_from_env(prefix: str) -> dict[str, str]:
 def basic_authorization(login: str, password: str) -> str:
     token = base64.b64encode(f"{login}:{password}".encode("utf-8")).decode("ascii")
     return f"Basic {token}"
+
+
+def authorization_header(value: str) -> str:
+    return value if value.lower().startswith(("basic ", "bearer ")) else f"Bearer {value}"
 
 
 def is_yandex_oauth_url(url: str | None) -> bool:
