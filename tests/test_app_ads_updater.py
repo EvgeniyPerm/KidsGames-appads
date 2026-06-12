@@ -97,6 +97,23 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(text, "fresh.com, 2, DIRECT\n")
         self.assertEqual(cached_text, "fresh.com, 2, DIRECT\n")
 
+    def test_fetch_one_extra_source_text_reads_static_chartboost_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = updater.Path(temp_dir)
+            source_path = temp_path / "chartboost-app-ads.txt"
+            source_path.write_text("chartboost.com, 123, DIRECT\n", encoding="utf-8")
+            cache_dir = temp_path / "cache"
+            with patch.object(updater, "STATIC_SOURCE_PATHS", {"chartboost": source_path}):
+                with patch.object(updater, "SOURCE_CACHE_DIR", cache_dir):
+                    with patch.object(updater, "source_access_from_env", side_effect=AssertionError("network source should not be used")):
+                        label, text = updater.fetch_one_extra_source_text("chartboost")
+
+            cached_text = (cache_dir / "chartboost.txt").read_text(encoding="utf-8")
+
+        self.assertEqual(label, "CHARTBOOST")
+        self.assertEqual(text, "chartboost.com, 123, DIRECT\n")
+        self.assertEqual(cached_text, "chartboost.com, 123, DIRECT\n")
+
     def test_month_day_year_has_no_leading_zero(self) -> None:
         self.assertEqual(updater.month_day_year(date(2026, 5, 13)), "May 13, 2026")
 
@@ -364,6 +381,21 @@ class AppAdsUpdaterTest(unittest.TestCase):
             updater.test_source_access("unityads-auth")
 
         diagnostic.assert_called_once_with()
+
+    def test_test_source_access_loads_static_chartboost_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = updater.Path(temp_dir)
+            source_path = temp_path / "chartboost-app-ads.txt"
+            source_path.write_text("chartboost.com, 123, DIRECT\n", encoding="utf-8")
+            cache_dir = temp_path / "cache"
+            with patch.object(updater, "STATIC_SOURCE_PATHS", {"chartboost": source_path}):
+                with patch.object(updater, "SOURCE_CACHE_DIR", cache_dir):
+                    with patch.object(updater, "source_access_from_env", side_effect=AssertionError("network source should not be used")):
+                        updater.test_source_access("chartboost")
+
+            cached_text = (cache_dir / "chartboost.txt").read_text(encoding="utf-8")
+
+        self.assertEqual(cached_text, "chartboost.com, 123, DIRECT\n")
 
     def test_looks_like_ads_txt_accepts_ads_line(self) -> None:
         text = "# Network\nexample.com, pub-123, DIRECT, abcdef\n"

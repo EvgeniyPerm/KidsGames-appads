@@ -167,7 +167,7 @@ jobs:
           INMOBI_PASSWORD: ${{ secrets.INMOBI_PASSWORD }}
           INMOBI_AUTHORIZATION: ${{ secrets.INMOBI_AUTHORIZATION }}
           INMOBI_COOKIE: ${{ secrets.INMOBI_COOKIE }}
-          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTH || secrets.UNITYADS_AUTH || secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE || secrets.UNITY_TOKEN) && 'mintegral,unity,vungle,ironsource,dtexchange,yandex') || 'mintegral,vungle,ironsource,dtexchange,yandex' }}
+          EXTRA_SOURCES: ${{ secrets.EXTRA_SOURCES || ((secrets.UNITY_AUTH || secrets.UNITYADS_AUTH || secrets.UNITY_AUTHORIZATION || secrets.UNITY_COOKIE || secrets.UNITY_TOKEN) && 'mintegral,unity,vungle,ironsource,dtexchange,yandex,chartboost') || 'mintegral,vungle,ironsource,dtexchange,yandex,chartboost' }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           TEST_TODAY: ${{ github.event.inputs.today }}
           TEST_TELEGRAM: ${{ github.event.inputs.test_telegram }}

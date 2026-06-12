@@ -55,6 +55,7 @@ MONTHS = {
 }
 
 SOURCE_ENV_PREFIXES = {
+    "chartboost": "CHARTBOOST",
     "bigo": "BIGO",
     "bidmachine": "BIDMACHINE",
     "dtexchange": "DTEXCHANGE",
@@ -67,6 +68,10 @@ SOURCE_ENV_PREFIXES = {
     "yandex_add": "YANDEX_ADD",
     "liftoff": "VUNGLE",
     "vungle": "VUNGLE",
+}
+
+STATIC_SOURCE_PATHS = {
+    "chartboost": Path("sources/chartboost-app-ads.txt"),
 }
 
 MINTEGRAL_MARKER = "Please replace your PublisherID with your actual publisher id acquired from Mintegral dashboard."
@@ -249,6 +254,9 @@ def fetch_text(
 
 def source_access_from_env(source_name: str) -> SourceAccess:
     key = source_name.strip().lower()
+    if key in STATIC_SOURCE_PATHS:
+        raise RuntimeError(f"{key} is a static source and does not use source URL settings.")
+
     prefix = SOURCE_ENV_PREFIXES.get(key)
     if not prefix:
         known = ", ".join(sorted(SOURCE_ENV_PREFIXES))
@@ -904,8 +912,27 @@ def extract_yandex_source_text(raw_text: str, first_lines: Iterable[str] = ()) -
 
 
 def test_source_access(source_name: str) -> None:
-    if source_name.strip().lower() == "unityads-auth":
+    source_key = source_name.strip().lower()
+    if source_key == "unityads-auth":
         test_unityads_auth_variants()
+        return
+    if source_key in STATIC_SOURCE_PATHS:
+        text = read_static_source_text(source_key)
+        if not looks_like_ads_txt(text):
+            preview = " | ".join(line[:120] for line in text.splitlines()[:3])
+            raise RuntimeError(f"{source_key} static source does not look like app-ads.txt. First lines: {preview}")
+        write_cached_source_text(source_key, text)
+        lines = text.splitlines()
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        logging.info(
+            "%s static source loaded successfully: %s bytes, %s lines, sha256=%s",
+            source_key,
+            len(text.encode("utf-8")),
+            len(lines),
+            digest,
+        )
+        for index, line in enumerate(lines[:5], start=1):
+            logging.info("%s line %s: %s", source_key, index, line[:300])
         return
 
     source = source_access_from_env(source_name)
@@ -1101,7 +1128,26 @@ def write_cached_source_text(source_name: str, text: str) -> None:
     source_cache_path(source_name).write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
 
 
+def read_static_source_text(source_name: str) -> str:
+    path = STATIC_SOURCE_PATHS[source_name]
+    if not path.exists():
+        raise RuntimeError(f"{source_name} static source file is missing: {path}")
+    text = path.read_text(encoding="utf-8-sig")
+    if not text.strip():
+        raise RuntimeError(f"{source_name} static source file is empty: {path}")
+    return text if text.endswith("\n") else text + "\n"
+
+
 def fetch_one_extra_source_text(source_name: str) -> tuple[str, str]:
+    source_key = source_name.strip().lower()
+    if source_key in STATIC_SOURCE_PATHS:
+        text = read_static_source_text(source_key)
+        if not looks_like_ads_txt(text):
+            preview = " | ".join(line[:120] for line in text.splitlines()[:3])
+            raise RuntimeError(f"{source_key} static source does not look like app-ads.txt. First lines: {preview}")
+        write_cached_source_text(source_key, text)
+        return source_key.upper(), text
+
     source = source_access_from_env(source_name)
     logging.info("Fetching extra source %s.", source.name)
     raw_text = fetch_text(
