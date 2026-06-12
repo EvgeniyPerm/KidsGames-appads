@@ -298,7 +298,7 @@ def source_access_from_env(source_name: str) -> SourceAccess:
     elif key == "unity":
         unity_name = os.getenv("UNITY_NAME")
         unity_token = os.getenv("UNITY_TOKEN")
-        unity_auth = os.getenv("UNITYADS_AUTH") or os.getenv("UNITY_AUTH")
+        unity_auth = os.getenv("UNITY_AUTH") or os.getenv("UNITYADS_AUTH")
         if unity_auth:
             headers["Authorization"] = authorization_header(unity_auth)
         if "Authorization" in headers:
