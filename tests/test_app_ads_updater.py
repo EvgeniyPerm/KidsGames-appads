@@ -97,22 +97,22 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(text, "fresh.com, 2, DIRECT\n")
         self.assertEqual(cached_text, "fresh.com, 2, DIRECT\n")
 
-    def test_fetch_one_extra_source_text_reads_static_chartboost_source(self) -> None:
+    def test_fetch_one_extra_source_text_reads_static_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = updater.Path(temp_dir)
-            source_path = temp_path / "chartboost-app-ads.txt"
-            source_path.write_text("chartboost.com, 123, DIRECT\n", encoding="utf-8")
+            source_path = temp_path / "bidmachine-app-ads.txt"
+            source_path.write_text("bidmachine.io, 123, DIRECT\n", encoding="utf-8")
             cache_dir = temp_path / "cache"
-            with patch.object(updater, "STATIC_SOURCE_PATHS", {"chartboost": source_path}):
+            with patch.object(updater, "STATIC_SOURCE_PATHS", {"bidmachine": source_path}):
                 with patch.object(updater, "SOURCE_CACHE_DIR", cache_dir):
                     with patch.object(updater, "source_access_from_env", side_effect=AssertionError("network source should not be used")):
-                        label, text = updater.fetch_one_extra_source_text("chartboost")
+                        label, text = updater.fetch_one_extra_source_text("bidmachine")
 
-            cached_text = (cache_dir / "chartboost.txt").read_text(encoding="utf-8")
+            cached_text = (cache_dir / "bidmachine.txt").read_text(encoding="utf-8")
 
-        self.assertEqual(label, "CHARTBOOST")
-        self.assertEqual(text, "chartboost.com, 123, DIRECT\n")
-        self.assertEqual(cached_text, "chartboost.com, 123, DIRECT\n")
+        self.assertEqual(label, "BIDMACHINE")
+        self.assertEqual(text, "bidmachine.io, 123, DIRECT\n")
+        self.assertEqual(cached_text, "bidmachine.io, 123, DIRECT\n")
 
     def test_month_day_year_has_no_leading_zero(self) -> None:
         self.assertEqual(updater.month_day_year(date(2026, 5, 13)), "May 13, 2026")
@@ -165,19 +165,13 @@ class AppAdsUpdaterTest(unittest.TestCase):
         self.assertEqual(source.headers["x-second-token"], "token-two")
         self.assertEqual(source.payload, b'{"pageNo":1}')
 
-    def test_source_access_from_env_uses_default_bidmachine_url_and_token(self) -> None:
+    def test_source_access_from_env_rejects_static_bidmachine_source(self) -> None:
         env = {
             "BIDMACHINE_TOKEN": "access-token",
         }
         with patch.dict(os.environ, env, clear=True):
-            source = updater.source_access_from_env("bidmachine")
-
-        self.assertEqual(source.name, "bidmachine")
-        self.assertEqual(source.url, "https://dashboard.bidmachine.io/app-ads/file/sellerId=789")
-        self.assertEqual(source.headers["X-Auth-Token"], "access-token")
-        self.assertEqual(source.headers["Accept"], "text/plain, */*")
-        self.assertEqual(source.method, "GET")
-        self.assertIsNone(source.payload)
+            with self.assertRaisesRegex(RuntimeError, "static source"):
+                updater.source_access_from_env("bidmachine")
 
     def test_source_access_from_env_uses_default_yandex_url_and_token(self) -> None:
         env = {
@@ -382,20 +376,20 @@ class AppAdsUpdaterTest(unittest.TestCase):
 
         diagnostic.assert_called_once_with()
 
-    def test_test_source_access_loads_static_chartboost_source(self) -> None:
+    def test_test_source_access_loads_static_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = updater.Path(temp_dir)
-            source_path = temp_path / "chartboost-app-ads.txt"
-            source_path.write_text("chartboost.com, 123, DIRECT\n", encoding="utf-8")
+            source_path = temp_path / "bidmachine-app-ads.txt"
+            source_path.write_text("bidmachine.io, 123, DIRECT\n", encoding="utf-8")
             cache_dir = temp_path / "cache"
-            with patch.object(updater, "STATIC_SOURCE_PATHS", {"chartboost": source_path}):
+            with patch.object(updater, "STATIC_SOURCE_PATHS", {"bidmachine": source_path}):
                 with patch.object(updater, "SOURCE_CACHE_DIR", cache_dir):
                     with patch.object(updater, "source_access_from_env", side_effect=AssertionError("network source should not be used")):
-                        updater.test_source_access("chartboost")
+                        updater.test_source_access("bidmachine")
 
-            cached_text = (cache_dir / "chartboost.txt").read_text(encoding="utf-8")
+            cached_text = (cache_dir / "bidmachine.txt").read_text(encoding="utf-8")
 
-        self.assertEqual(cached_text, "chartboost.com, 123, DIRECT\n")
+        self.assertEqual(cached_text, "bidmachine.io, 123, DIRECT\n")
 
     def test_looks_like_ads_txt_accepts_ads_line(self) -> None:
         text = "# Network\nexample.com, pub-123, DIRECT, abcdef\n"

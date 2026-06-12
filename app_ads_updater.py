@@ -71,6 +71,7 @@ SOURCE_ENV_PREFIXES = {
 }
 
 STATIC_SOURCE_PATHS = {
+    "bidmachine": Path("sources/bidmachine-app-ads.txt"),
     "chartboost": Path("sources/chartboost-app-ads.txt"),
 }
 
